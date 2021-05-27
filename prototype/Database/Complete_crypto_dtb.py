@@ -15,7 +15,7 @@ STORE = os.path.join(os.path.dirname(__file__), 'dtb/store.h5')
 
 class Dtb_crypto_historic():
     # Database that autocomplete containing all historic of requested crypto with 1min resolution
-    def __init__(self, maxSizeDtb=1e3, 
+    def __init__(self, maxSizeDtb=1e2, 
                  resolution = 'min'):
                  
         self.possible_resolutions = {'min': 60, 'hour': 3600, 'day': 86400}
@@ -37,6 +37,8 @@ class Dtb_crypto_historic():
         ts = int(((now-dt).timestamp()//60)*60)
 
         # 1) Complete dataframe with new timestamps + studied crytpo
+        if verbose: print('Adding missing values in historic...')
+
         def full_df():
             # Complete columns
             missing_crypto = [crypto for crypto in crypto_names if crypto not in self.df.columns]
@@ -65,22 +67,25 @@ class Dtb_crypto_historic():
             for crypto in self.df.columns:
                 api_crypto_dict = call_api_historic(start=max(tmin, current_max_t), end=tmax, step=self.time_resolution, crypto = crypto)
                 for k,v in api_crypto_dict.items():
-                    self.df.loc[k][crypto] = v
+                    self.df.loc[k][crypto] = v['open']
         full_df()
 
         # 2) Complete Delta Time missing for each crypto-currency
+        if verbose: print('Removing NaN values in historic...')
+
         def fill_df():
             # Determine NaN values and correct them
             flag_array_is_nan = self.df.isnull().values
             index_array_is_nan =  [(i, j) for i in range(len(flag_array_is_nan)) 
                                             for j in range(len(flag_array_is_nan[0])) if flag_array_is_nan[i,j]]
+            if verbose: print(f'{len(index_array_is_nan)} NaN values to remove')
             for x,y in index_array_is_nan:
                 t_event = self.df.iloc[[x]].index[0]
                 crypto = self.df.iloc[[x]].columns[y]
                 # Coinbase API call, but it happens that some values are missing
                 buffer = call_api_historic(start=t_event, end=t_event, step=self.time_resolution, crypto = crypto)
                 if len(buffer)>0:
-                    self.df.iloc[x,y]=list(buffer.values())[0]
+                    self.df.iloc[x,y]=list(buffer.values())[0]['open']
             # If Nan values remains fo interpolation
             self.df=(self.df.fillna(method='ffill') + self.df.fillna(method='bfill'))/2
         fill_df()
@@ -128,7 +133,7 @@ def call_api_historic(start=0, end=0, step=60, crypto = 'BTC-EUR'):
         # Use second line that corresponds to lowest price
         data_serie = {}
         for d in data:
-            data_serie[d[0]] = {'low':d[1], 'volume':d[-1]}
+            data_serie[d[0]] = {'open':d[3], 'volume':d[-1]}
         return data_serie
     
     data_serie = {}
@@ -148,7 +153,7 @@ with open(FILE_STUDY) as f:
         crypto_study = [d['coinbase_name'] for d in data]
 
 if __name__ =="__main__":
-    os.remove('dtb\store.h5')
+    os.remove('dtb/store.h5')
     Dtb = Dtb_crypto_historic(resolution='min')
     Dtb.update_dtb(crypto_study, verbose=True)
     print(Dtb.df)

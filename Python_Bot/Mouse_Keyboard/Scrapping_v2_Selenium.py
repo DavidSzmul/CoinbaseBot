@@ -68,59 +68,62 @@ class AutoSelector(object):
         time.sleep(2) #Need to wait before doing 1rst transfer
 
     def convert(self, from_, to_, ammount):
-
-        self._wait(dict_id['buy_sell'], idx_list=0).click()
-        time.sleep(1)
-        for c in self._wait(dict_id['convert'], unique_=False): # Multiple object with same properties, try all of them
-            try:
-                c.click()
-                break
-            except:
-                continue
-        self._wait(dict_id['ammount'],idx_list=1).send_keys(ammount)
-
-        def click_on_crypto(crypto):
-            NB_DIV_PER_CRYPTO = 3
-            IDX_CRYPTO_NAME = 1
-            MAX_DELAY = 5
-            grid = self._wait(dict_id['grid'])
-            divList = self._wait('div', obj=grid, unique_=False) 
-            childs_crypto = [divList[i] for i in range(len(divList)) if i%NB_DIV_PER_CRYPTO==IDX_CRYPTO_NAME] # Child containing name of crypto
-            
-            # Wait while name is not empty (time for loading page)
-            t_start = time.time()
-            while True:
-                if time.time()-t_start>=MAX_DELAY:
-                    raise ConnectionError('Page is not loading to find crypto')
-                if all([c.find_element_by_tag_name('p').text!='' for c in childs_crypto]):
-                    break
-
-            # Check if name of crypto corresponds then return
-            for c in childs_crypto:
-                if c.find_element_by_tag_name('p').text==crypto:
+        try:
+            self._wait(dict_id['buy_sell'], idx_list=0).click()
+            time.sleep(1)
+            for c in self._wait(dict_id['convert'], unique_=False): # Multiple object with same properties, try all of them
+                try:
                     c.click()
-                    time.sleep(0.5)
-                    return 
-            raise AssertionError('Crypto '+ crypto +' not found')
+                    break
+                except:
+                    continue
+            self._wait(dict_id['ammount'],idx_list=1).send_keys(ammount)
 
-        # From
-        self._wait(dict_id['from']).click()
-        click_on_crypto(from_)
+            def click_on_crypto(crypto):
+                NB_DIV_PER_CRYPTO = 3
+                IDX_CRYPTO_NAME = 1
+                MAX_DELAY = 5
+                grid = self._wait(dict_id['grid'])
+                divList = self._wait('div', obj=grid, unique_=False) 
+                childs_crypto = [divList[i] for i in range(len(divList)) if i%NB_DIV_PER_CRYPTO==IDX_CRYPTO_NAME] # Child containing name of crypto
+                
+                # Wait while name is not empty (time for loading page)
+                t_start = time.time()
+                while True:
+                    if time.time()-t_start>=MAX_DELAY:
+                        raise ConnectionError('Page is not loading to find crypto')
+                    if all([c.find_element_by_tag_name('p').text!='' for c in childs_crypto]):
+                        break
 
-         # To
-        self._wait(dict_id['to']).click()
-        click_on_crypto(to_)
+                # Check if name of crypto corresponds then return
+                for c in childs_crypto:
+                    if c.find_element_by_tag_name('p').text==crypto:
+                        c.click()
+                        time.sleep(0.5)
+                        return 
+                raise AssertionError('Crypto '+ crypto +' not found')
 
-        # Previsualisation + Confirmation
-        self._wait(dict_id['preview'], idx_list=2).click()
-        time.sleep(2)
-        self._wait(dict_id['confirm'], idx_list=2).click()
-        self._wait(dict_id['consult'])
-        
-        # Display transaction
-        print(f'Conversion of {ammount}€ from {from_} to {to_} confirmed')
-        self.driver.refresh()
-        time.sleep(2) #Need to wait before doing 1rst transfer
+            # From
+            self._wait(dict_id['from']).click()
+            click_on_crypto(from_)
+
+            # To
+            self._wait(dict_id['to']).click()
+            click_on_crypto(to_)
+
+            # Previsualisation + Confirmation
+            self._wait(dict_id['preview'], idx_list=2).click()
+            time.sleep(2)
+            self._wait(dict_id['confirm'], idx_list=2).click()
+            self._wait(dict_id['consult'])
+            
+            # Display transaction
+            print(f'Conversion of {ammount}€ from {from_} to {to_} confirmed')
+            self.driver.refresh()
+            time.sleep(2) #Need to wait before doing 1rst transfer
+            return True
+        except : # Problem during conversion
+            return False
 
     def _wait(self, css_selector, obj = None, idx_list=None, max_delay=10, unique_ = True):
         if obj is None:

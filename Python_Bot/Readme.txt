@@ -1,3 +1,12 @@
-Goal of this folder is to generate a Database including all historic of cryptocurrency 
-in order to do training of what are the best actions to do depending on 
-historic
+Topic to resolve:
+
+Coinbase API
+- Scrapping get Real Time crypto values -> DONE
+- Scrapping transfer crypto -> DONE
+- REST api to get past historic of crypto values saved in Database -> DONE
+
+Processing Coinbase:
+- Preprocessing from Dataframe to optimal NN input -> WIP
+- Training/Testing from Database using Supervised Learning -> WIP
+- Training/Testing from Database using Reinforcement Learning -> To brainstorm
+- Real-Time application of trained model -> Final operation

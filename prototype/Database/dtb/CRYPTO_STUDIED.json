@@ -1,6 +1,0 @@
-[
-  { "name":"Bitcoin", "coinbase_name": "BTC-EUR"},
-  { "name":"Eutherium", "coinbase_name": "ETH-EUR"},
-  { "name":"Eutherium Classic", "coinbase_name": "ETC-EUR"},
-  { "name":"Litecoin", "coinbase_name": "LTC-EUR"}
-]

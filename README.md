@@ -1,5 +1,5 @@
 # CoinbaseBot
-Use Coinbase API to connect with an homemade Bot to optimize portfolio of crypto. 
+Use of Coinbase API + Scrapping + IA to create an homemade Bot to optimize portfolio of crypto. 
 
 Different topics/issues are related to this project
 

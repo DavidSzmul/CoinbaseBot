@@ -1,5 +1,5 @@
 # CoinbaseBot
-<img src="./assets/bot.png" width="360">
+<img src="./assets/bot.PNG" width="240">
 
 Use of Coinbase API + Scrapping + IA to create an homemade Bot to optimize portfolio of crypto. 
 

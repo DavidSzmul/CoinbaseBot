@@ -10,12 +10,14 @@ from datetime import date, datetime, timedelta
 import urllib
 import requests
 
-FILE_STUDY = os.path.join(os.path.dirname(__file__), 'dtb/CRYPTO_STUDIED.json')
-STORE = os.path.join(os.path.dirname(__file__), 'dtb/store.h5')
+import config
+
+CRYPTO_STUDY_FILE = os.path.join(config.DATA_DIR, 'dtb/CRYPTO_STUDIED.json')
+STORE = os.path.join(config.DATA_DIR, 'dtb/store.h5')
 
 class Dtb_crypto_historic():
     # Database that autocomplete containing all historic of requested crypto with 1min resolution
-    def __init__(self, maxSizeDtb=1e2, 
+    def __init__(self, maxSizeDtb=1e3, 
                  resolution = 'min'):
                  
         self.possible_resolutions = {'min': 60, 'hour': 3600, 'day': 86400}
@@ -26,7 +28,7 @@ class Dtb_crypto_historic():
         self.time_resolution = self.possible_resolutions[self.resolution]
         self.store = pd.HDFStore(STORE)
         self.df = self.load()
-        with open(FILE_STUDY) as f:
+        with open(CRYPTO_STUDY_FILE) as f:
             data = json.load(f)
         crypto_study = [d['coinbase_name'] for d in data]
 
@@ -79,15 +81,19 @@ class Dtb_crypto_historic():
             index_array_is_nan =  [(i, j) for i in range(len(flag_array_is_nan)) 
                                             for j in range(len(flag_array_is_nan[0])) if flag_array_is_nan[i,j]]
             if verbose: print(f'{len(index_array_is_nan)} NaN values to remove')
-            for x,y in index_array_is_nan:
-                t_event = self.df.iloc[[x]].index[0]
-                crypto = self.df.iloc[[x]].columns[y]
-                # Coinbase API call, but it happens that some values are missing
-                buffer = call_api_historic(start=t_event, end=t_event, step=self.time_resolution, crypto = crypto)
-                if len(buffer)>0:
-                    self.df.iloc[x,y]=list(buffer.values())[0]['open']
+            # for x,y in index_array_is_nan:
+            #     t_event = self.df.iloc[[x]].index[0]
+            #     crypto = self.df.iloc[[x]].columns[y]
+
+            #     # Coinbase API call, but it happens that some values are missing
+            #     buffer = call_api_historic(start=t_event, end=t_event, step=self.time_resolution, crypto = crypto)
+            #     if len(buffer)>0:
+            #         self.df.iloc[x,y]=list(buffer.values())[0]['open']
+
             # If Nan values remains fo interpolation
             self.df=(self.df.fillna(method='ffill') + self.df.fillna(method='bfill'))/2
+            self.df= self.df.fillna(method='ffill')
+            self.df= self.df.fillna(method='bfill')
         fill_df()
 
     def save(self):
@@ -126,9 +132,9 @@ def call_api_historic(start=0, end=0, step=60, crypto = 'BTC-EUR'):
         data = r.json()
 
         # Verification that timestamps are coherent
-        if len(data)>0 and (data[0][0] != t_end or data[-1][0] != t_start):
-            raise AssertionError(f'Timestamp not synchronized with Coinbase API.\n\
-    Delta start: {data[0][0] - t_end}s; Delta end: {data[-1][0] - t_start}s')
+    #     if len(data)>0 and (data[0][0] != t_end or data[-1][0] != t_start):
+    #         raise AssertionError(f'Timestamp not synchronized with Coinbase API.\n\
+    # Delta start: {data[0][0] - t_end}s; Delta end: {data[-1][0] - t_start}s')
 
         # Use second line that corresponds to lowest price
         data_serie = {}
@@ -148,12 +154,14 @@ def call_api_historic(start=0, end=0, step=60, crypto = 'BTC-EUR'):
         start = start + step
     return data_serie
 
-with open(FILE_STUDY) as f:
+with open(CRYPTO_STUDY_FILE) as f:
         data = json.load(f)
         crypto_study = [d['coinbase_name'] for d in data]
 
 if __name__ =="__main__":
-    os.remove('dtb/store.h5')
+
+    # if os.path.exists(STORE):
+    #     os.remove(STORE)
     Dtb = Dtb_crypto_historic(resolution='min')
     Dtb.update_dtb(crypto_study, verbose=True)
     print(Dtb.df)

@@ -1,4 +1,5 @@
 [
+  { "name":"USD Coin", "coinbase_name": "USDC-EUR"},
   { "name":"Bitcoin", "coinbase_name": "BTC-EUR"},
   { "name":"Eutherium", "coinbase_name": "ETH-EUR"},
   { "name":"Eutherium Classic", "coinbase_name": "ETC-EUR"},

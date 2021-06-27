@@ -17,7 +17,7 @@ STORE = os.path.join(config.DATA_DIR, 'dtb/store.h5')
 
 class Dtb_crypto_historic():
     # Database that autocomplete containing all historic of requested crypto with 1min resolution
-    def __init__(self, maxSizeDtb=1e3, 
+    def __init__(self, maxSizeDtb=1e4, 
                  resolution = 'min'):
                  
         self.possible_resolutions = {'min': 60, 'hour': 3600, 'day': 86400}
@@ -108,7 +108,7 @@ class Dtb_crypto_historic():
 
 
 # Create a function to fetch the data
-def call_api_historic(start=0, end=0, step=60, crypto = 'BTC-EUR'):
+def call_api_historic(start=0, end=0, step=60, crypto = 'BTC-USD'):
 
     MAX_REQUEST = 300
     dt = timedelta(seconds=step*(MAX_REQUEST-1))
@@ -120,6 +120,13 @@ def call_api_historic(start=0, end=0, step=60, crypto = 'BTC-EUR'):
         OFFSET_SEC_API = 7200 # For unknown reason, an offset of 7200s is added between start and stop from API
         date_start = datetime.fromtimestamp(t_start-OFFSET_SEC_API)
         date_end = datetime.fromtimestamp(t_end-OFFSET_SEC_API)
+
+        if crypto=='USDC-USD':
+            time=np.arange(t_start, t_end, 60)
+            data_serie={}
+            for t in time:
+                data_serie[t] = {'open':1, 'volume':0}
+            return data_serie
 
         # Generate Coinase Url
         params = {'start': date2coinbaseDate(date_start), 'end': date2coinbaseDate(date_end), 'granularity': step}
@@ -160,8 +167,8 @@ with open(CRYPTO_STUDY_FILE) as f:
 
 if __name__ =="__main__":
 
-    # if os.path.exists(STORE):
-    #     os.remove(STORE)
+    if os.path.exists(STORE):
+        os.remove(STORE)
     Dtb = Dtb_crypto_historic(resolution='min')
     Dtb.update_dtb(crypto_study, verbose=True)
     print(Dtb.df)

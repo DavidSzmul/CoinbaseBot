@@ -14,7 +14,7 @@ class Portfolio(dict):
         crypto_study = [d['coinbase_name'] for d in data]
         for c in crypto_study:
             self[c] = {'ammount': 0, 'value': 0, 'last-price': 0}
-        self.stableCoin = 'USDC-EUR'
+        self.stableCoin = 'USDC-USD'
     
     def update_last_prices(self, last_historic):
         #### TODO

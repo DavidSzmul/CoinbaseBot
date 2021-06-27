@@ -6,7 +6,8 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from collections import deque
 
-DRIVER_PATH = os.path.join(os.getcwd(),"chromedriver.exe")
+import config
+
 options = Options()
 options.headless = False
 options.add_argument("--window-size=1920,1200")
@@ -25,8 +26,14 @@ async def refresh_task_every(task, delta_t = 60):
 class Scrapping_RT_crypto(object):
 
     def __init__(self, max_len = 60):
-        self.driver = webdriver.Chrome(DRIVER_PATH, options=options)
+        self.driver = webdriver.Chrome(config.DRIVER_PATH, options=options)
         self.crypto_historic = deque(maxlen=max_len)
+
+
+    def refresh_task_every(self, delta_t = 60):
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(refresh_task_every(self.refresh_crypto_value, delta_t=delta_t))
+
 
     def refresh_crypto_value(self):
         NB_PAGE = 3
@@ -44,13 +51,17 @@ class Scrapping_RT_crypto(object):
                     list_crypto = np.array(grid[0].text.replace(',','.').replace('\u202f','').replace(' €','').split('\n'))
                     list_crypto = list_crypto.reshape(len(list_crypto)//8,8)
                     for l in list_crypto:
-                        crypto_dict[l[1]+'-EUR']=float(l[2])
+                        crypto_dict[l[1]+'-USD']=float(l[2])
                     break
                 print('Retry')
                 if ctr_try>=MAX_TRY:
                     raise AssertionError('Too many try to get crypto data')
         self.crypto_historic.append(crypto_dict)
 
-scrap = Scrapping_RT_crypto()
-loop = asyncio.get_event_loop()
-loop.run_until_complete(refresh_task_every(scrap.refresh_crypto_value, delta_t=60))
+if __name__=='__main__':
+    scrap = Scrapping_RT_crypto()
+    ### From external function
+    # loop = asyncio.get_event_loop()
+    # loop.run_until_complete(refresh_task_every(scrap.refresh_crypto_value, delta_t=60))
+    ### Directly inside class
+    scrap.refresh_task_every()

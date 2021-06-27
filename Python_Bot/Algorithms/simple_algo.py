@@ -52,6 +52,14 @@ class Simple_Algo(object):
             self.save = portfolio_historic
         pass
 
+    def loop_RealTime(self, portfolio, verbose=0):
+
+        # TODO Enabling the possibility to implement on local server the visualization
+        # Create LocalSever
+
+        while True:
+            df_cut = df_historic.iloc[i-self.duration_historic:i, :]
+
     def run(self, portfolio, historic, time=None, debug_mode=False):
         
         #Initialization
@@ -169,10 +177,8 @@ class Simple_Algo(object):
             sp[2].set_xlabel('Time (min)')  
             sp[3].set_title('Quality factor')
             
-
             for i in range(3):
                 sp[i].legend(loc="upper right")
-                
             plt.show()  
 
 
@@ -218,11 +224,7 @@ class Simple_Algo(object):
             
             priceEvolution = np.array(hist[k]['last-price'])
             #########################
-            ### 1: Percentage price
-            # pricePrc = np.diff(priceEvolution, prepend=priceEvolution[0])/priceEvolution
-            # sp[0].plot(t, pricePrc, '-*', label=k)
-
-            ### 2: Normalized Evolution
+            ### Normalized Evolution
             priceEvolution_norm = Normalizer().fit_transform([priceEvolution])[0]
             sp[0].plot(t, priceEvolution_norm, '-*', label=k)
             #########################

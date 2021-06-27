@@ -156,6 +156,6 @@ class AutoSelector(object):
 if __name__=="__main__":
     # First Connection
     autoSelect = AutoSelector(first_connection=False)
-    conversion_done =  try_(autoSelect.convert('ETH', 'BTC', 5))  # Dogecoin not implemented on coinbase
+    conversion_done =  try_(autoSelect.convert('ETH', 'BTC', 5)) 
     print(conversion_done)
-    # conversion_done =  autoSelect.convert('BTC', 'ETH', 5)  # Dogecoin not implemented on coinbase
+    # conversion_done =  autoSelect.convert('BTC', 'ETH', 5)

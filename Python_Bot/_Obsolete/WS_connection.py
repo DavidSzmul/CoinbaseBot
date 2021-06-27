@@ -1,4 +1,7 @@
-# Goal of scritp
+####################################################################
+### Goal was to check prices of crypto using Google search + Scrapping
+### But did not work for all cryptos, need to find prices using Coinbase
+####################################################################
 # Import the libraries 
 from bs4 import BeautifulSoup 
 import requests 

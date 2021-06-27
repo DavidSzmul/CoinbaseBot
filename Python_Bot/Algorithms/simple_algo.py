@@ -1,4 +1,6 @@
 from Algorithms.portfolio import Portfolio
+from Database.Get_RT_crypto_dtb import Scrapping_RT_crypto
+from Coinbase_API.Scrapping_transfer_v2_Selenium import AutoSelector
 import config
 
 import os
@@ -8,6 +10,8 @@ import json
 from matplotlib import pyplot as plt
 from sklearn.preprocessing import Normalizer
 from scipy import signal
+import asyncio
+import time
 # Algorithm made for 60s of resolution
 
 class Simple_Algo(object):
@@ -52,13 +56,40 @@ class Simple_Algo(object):
             self.save = portfolio_historic
         pass
 
-    def loop_RealTime(self, portfolio, verbose=0):
+    def loop_RealTime(self, portfolio, delta_t=60, verbose=0):
 
         # TODO Enabling the possibility to implement on local server the visualization
         # Create LocalSever
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self.step_RealTime(portfolio, delta_t=delta_t))
+    
+    async def step_RealTime(self, portfolio, delta_t=60):
+        
+        ## Initializtion
+        srap_RT_crypto = Scrapping_RT_crypto(max_len=self.duration_historic)
+        scrap_transaction = AutoSelector()
 
+        ## Loop at each new call
         while True:
-            df_cut = df_historic.iloc[i-self.duration_historic:i, :]
+            t_sart = time.time()
+
+            ######################################
+            ### Main Task
+            # Update Crypto prices
+            srap_RT_crypto.refresh_crypto_value()
+            
+            # Decision based on Algorithm
+            self.run(portfolio, srap_RT_crypto.crypto_historic, time=int(t_sart))
+
+            # Realize transaction if exists
+            if self.transaction is not None:
+                scrap_transaction.convert(self.transaction['from'], self.transaction['to'], self.transaction['value'])
+            ######################################
+            # Sleep current period of time
+            t_sleep = delta_t-time.time()+t_sart
+            if t_sleep<0:
+                print(f'WARNING: Task takes more than {delta_t}s to execute')
+            await asyncio.sleep(max(t_sleep,0))
 
     def run(self, portfolio, historic, time=None, debug_mode=False):
         
@@ -284,7 +315,13 @@ if __name__ == '__main__':
     Ptf.add_money(50, need_confirmation=False)
     Algo = Simple_Algo()
 
+    ##################################
+    ### Test on database
     # Algo.run(Ptf, df)
-    Algo.test(Ptf, df, verbose=True)
+    # Algo.test(Ptf, df, verbose=True)
+    ##################################
+    ### Loop in real time
+    Algo.loop_RealTime(Ptf)
+    ##################################
     a=1
     

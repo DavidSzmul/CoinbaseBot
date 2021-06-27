@@ -17,7 +17,8 @@ dict_id = {
     'ammount': '.ivDhsu',
     'from': "[data-element-handle='convert-from-selector']",
     'to': "[data-element-handle='convert-to-selector']",
-    'grid': '.dpKzAY',
+    # 'grid': '.dpKzAY', # Obsolete ?
+    'grid': '.gLLsql',
     'preview': '.isVEuC',
     'confirm': '.isVEuC',
     'consult': '.jwGeTR'
@@ -76,7 +77,8 @@ class AutoSelector(object):
 
     def convert(self, from_, to_, ammount):
         self._wait(dict_id['buy_sell'], idx_list=0).click()
-        time.sleep(2)
+        time.sleep(4)
+        print('DEBUG SCRAPPING: High timiing due to low internet')
         for c in self._wait(dict_id['convert'], unique_=False): # Multiple object with same properties, try all of them
             try:
                 c.click()
@@ -157,5 +159,5 @@ if __name__=="__main__":
     # First Connection
     autoSelect = AutoSelector(first_connection=False)
     conversion_done =  try_(autoSelect.convert('ETH', 'BTC', 5)) 
-    print(conversion_done)
+    # print(conversion_done)
     # conversion_done =  autoSelect.convert('BTC', 'ETH', 5)

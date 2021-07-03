@@ -51,7 +51,6 @@ class Environment_Crypto(object):
             self.curent_experiences = self.test_experience
         else:
             self.curent_experiences = None
-
         self._mode = mode
         self._ctr = 0
         self.last_experience = {'state': None, 'next_state':None, 'evolution': None}
@@ -65,30 +64,27 @@ class Environment_Crypto(object):
         pass
 
     def generate_train_test_environment(self,
-                                        ratio_unsynchrnous_time = 0.66 # 2/3 of of training is unsychronous to augment database
+                                        ratio_unsynchrnous_time = 0.66, # 2/3 of of training is unsychronous to augment database
                                         ratio_train_test = 0.8, verbose=1): 
+
+        ### LOAD HISTORIC
+        if verbose:
+            print('Loading of Historic of cryptos...')
 
         CRYPTO_STUDY_FILE = os.path.join(config.DATA_DIR, 'dtb/CRYPTO_STUDIED.json')
         STORE = os.path.join(config.DATA_DIR, 'dtb/store.h5')
         store = pd.HDFStore(STORE)
         df = store['min']
 
-        # Take only crypto included inside Crypto_file
-        if verbose:
-            print('Loading of Historic of cryptos...')
-
         with open(CRYPTO_STUDY_FILE) as f:
             data = json.load(f)
             crypto_study = [d['coinbase_name'] for d in data]
         crypto_to_remove = [c for c in df.columns if c not in crypto_study]
         df_historic = df.drop(columns=crypto_to_remove)
-
+        
+        ### NORMALIZE
         if verbose:
             print('Generation of train/test database...')
-        # It is possible to set an environment with an estimation of the reward
-        # The problem is transformed to semi-supervised learning because the training
-        # part does not need to set an action to know the reward
-        # Here it will simply be +reward or -reward depending on the decision
         cryptos = list(df_historic.columns)
         nb_cryptos = len(cryptos)
         size_dtb = len(df_historic.index)
@@ -102,17 +98,6 @@ class Environment_Crypto(object):
         train_arr = df_arr_normalized[:idx_cut_train_test]
         test_arr = df_arr_normalized[idx_cut_train_test:]
 
-        # The database contains multiple cryptos for different timing:
-        # The idea is to have a RL model that takes the decision independantly of 
-        # the type of crypto, only its evolution
-        # For this, the model has to decide the best crypto between one where all money is
-        # and another candidate that may be better in the future. Then do this iteratively
-        # for all cryptos.
-
-        # Because the model is independant of the crypto, it is possible to augment data
-        # by randomly choose a start time for each cryptos. But because a lot of cryptos are
-        # highly correlated, it is mandatory that one part of the database is synchronous in time
-        # in order to avoid biases when executing in reality
         def get_evolution(future):
             # Estimate evolution of one crypto
             # 1rst column: crypto where money is already

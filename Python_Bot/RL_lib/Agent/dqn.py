@@ -6,11 +6,13 @@ import keras
 from keras.models import Sequential, load_model, save_model
 from keras.layers import Dense
 from keras.optimizers import Adam
-from app.library.Memory import Memory, PER
-from app.library.Environment import Environment
+
+from RL_lib.Memory import Memory, PER
+from RL_lib.Environment import Environment
+
 
 class DQN_Agent:
-    def __init__(self, env, 
+    def __init__(self, state_size, action_size
     automatic_model=True, layers_model = [32, 32], # In case of auto-generated model
     loading_model=False, name_model='', model=None,   # In case of loaded model (or model directly)
     gamma=0.99, epsilon_min = 0.01, epsilon_decay = 0.9995, learning_rate=1e-3, tau = 1e-2,
@@ -29,9 +31,8 @@ class DQN_Agent:
         self.use_PER = use_PER
         
         # Global Parameters
-        self.env= env
-        self.state_size = env.observation_space.shape[0]
-        self.action_size = env.action_space.n
+        self.state_size = state_size
+        self.action_size = action_size
 
         if self.use_PER:
             self.memory = PER(memory_size)
@@ -61,11 +62,11 @@ class DQN_Agent:
     def _build_model(self, layers_model):
         # Neural Net for Deep-Q learning Model
         model = Sequential()
-        model.add(Dense(layers_model[0], activation='relu', input_shape=self.env.observation_space.shape))
+        model.add(Dense(layers_model[0], activation='relu', input_shape=self.state_size))
         for layer in layers_model[1:]:
             # model.add(BatchNormalization()) # Batch Normalization is source of divergence for Reinforcement Learning
             model.add(Dense(layer, activation='relu'))
-        model.add(Dense(self.env.action_space.n, activation='linear'))
+        model.add(Dense(self.action_size, activation='linear'))
         model.compile(loss="mse", 
                       optimizer=Adam(lr=self.learning_rate), metrics=['accuracy'])
         return model
@@ -215,7 +216,9 @@ class DQN_Agent:
             return self.get_action(state)
         else:
             # Get random action
-            return self.env.action_space.sample()
+            # return self.env.action_space.sample() # ONLY if environment linked to class
+            # ONLY FOR discrete events for the moment
+            return random.choice(list(range(self.action_size)))
 
     def save_weights(self, filepath, overwrite=False):
         save_model(self.model, filepath, overwrite=overwrite)

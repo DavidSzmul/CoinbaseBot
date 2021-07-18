@@ -318,10 +318,10 @@ if __name__ == '__main__':
     ##################################
     ### Test on database
     # Algo.run(Ptf, df)
-    # Algo.test(Ptf, df, verbose=True)
+    Algo.test(Ptf, df, verbose=True)
     ##################################
     ### Loop in real time
-    Algo.loop_RealTime(Ptf)
+    # Algo.loop_RealTime(Ptf)
     ##################################
     a=1
     

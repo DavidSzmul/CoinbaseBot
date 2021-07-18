@@ -1,13 +1,9 @@
 ### Algorithm of choice of crypto using DQN Reinforcement Learning Algo
 ### Model can be continuously improved by generating augmented database
-from Algorithms.portfolio import Portfolio
-from Database.Get_RT_crypto_dtb import Scrapping_RT_crypto
-from Coinbase_API.Scrapping_transfer_v2_Selenium import AutoSelector
-
-from RL_lib.Agent.dqn import DQN_Agent
-import config
-
 import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1' # To use only CPU (for debugging)
+print('Use of CPU')
+
 import pandas as pd
 import numpy as np
 import json
@@ -16,8 +12,18 @@ from sklearn.preprocessing import Normalizer
 from scipy import signal
 import asyncio
 import time
+import random
 import itertools
 
+import config
+from Algorithms.portfolio import Portfolio
+from Database.Get_RT_crypto_dtb import Scrapping_RT_crypto
+from Coinbase_API.Scrapping_transfer_v3_Selenium import AutoSelector
+from RL_lib.Agent.dqn import DQN_Agent
+
+# Environment interacting with Coinbase interface to train/test based on historic of cryptos
+# The environment is made to sequentially compare cryptos one by one (including taxes when necessary)
+# The specificity of this environment is that it is automatically done after all cryptos has been studied
 class Environment_Crypto(object):
 
     def __init__(self, duration_historic=120, prc_taxes=0.01,
@@ -29,6 +35,9 @@ class Environment_Crypto(object):
         self.train_experience = []
         self.test_experience = []
         self.curent_experiences = None
+        self.current_crypto = 0 # Index of chosen crypto
+        self.normalizer = None
+        self._mode = None
         self.reset_mode(mode)
 
     def reset_mode(self, mode):
@@ -38,12 +47,13 @@ class Environment_Crypto(object):
         mode_needing_dtb = ['train', 'test']
 
         if mode not in possible_modes:
-            raise ValueError('mode needs to be contained in' + str.join(possible_modes))
+            raise ValueError('mode needs to be contained in' + str.join(possible_modes))        
         
-        # Check if a new train/test database needs to be generated
-        if (mode in mode_needing_dtb) and (previous_mode not in mode_needing_dtb):
-            self.generate_train_test_environment()
-
+        # Check if a new train/test database needs to be regenerated
+        flag_regenerate = (mode in mode_needing_dtb) and (previous_mode not in mode_needing_dtb)
+        self.generate_train_test_environment(flag_regenerate=flag_regenerate)
+        self._mode = mode
+        
         # Set current experiences to appropriate mode (no memory added because it acts as a pointer)
         if mode == 'train':
             self.curent_experiences = self.train_experience
@@ -51,116 +61,131 @@ class Environment_Crypto(object):
             self.curent_experiences = self.test_experience
         else:
             self.curent_experiences = None
-        self._mode = mode
         self._ctr = 0
         self.last_experience = {'state': None, 'next_state':None, 'evolution': None}
 
-    def _get_transform_normalize(self, df_historic):
-        # TODO
+    def _fit_normalizer(self, df_historic):
+        
         # Need to normalize data in order to effectively train.
         # But this transform has to be done before running in real time
-        self.normalizer = None
+        self.normalizer = Normalizer()
+        self.normalizer.fit(df_historic)
+        # TODO
         # Or maybe use diff_prc, already normalized
-        pass
 
-    def generate_train_test_environment(self,
+    def generate_train_test_environment(self, flag_regenerate=True
                                         ratio_unsynchrnous_time = 0.66, # 2/3 of of training is unsychronous to augment database
                                         ratio_train_test = 0.8, verbose=1): 
 
-        ### LOAD HISTORIC
+        ### LOAD HISTORIC + STUDIED CRYPTO
         if verbose:
             print('Loading of Historic of cryptos...')
-
-        CRYPTO_STUDY_FILE = os.path.join(config.DATA_DIR, 'dtb/CRYPTO_STUDIED.json')
-        STORE = os.path.join(config.DATA_DIR, 'dtb/store.h5')
-        store = pd.HDFStore(STORE)
-        df = store['min']
-
-        with open(CRYPTO_STUDY_FILE) as f:
-            data = json.load(f)
-            crypto_study = [d['coinbase_name'] for d in data]
-        crypto_to_remove = [c for c in df.columns if c not in crypto_study]
-        df_historic = df.drop(columns=crypto_to_remove)
+        df_historic = config.load_df_historic('min')
         
         ### NORMALIZE
         if verbose:
+            print('Normalization of database...')
+        self._fit_normalizer(df_historic)
+        if not flag_regenerate:
+            return
+
+        ### CUT TRAIN/TEST DTB
+        if verbose:
             print('Generation of train/test database...')
-        cryptos = list(df_historic.columns)
-        nb_cryptos = len(cryptos)
-        size_dtb = len(df_historic.index)
-
-        self._get_transform_normalize(df_historic)
+        cryptos = list(df_historic.columns)  
         df_arr_normalized = self.normalizer.transform(df_historic.to_numpy())
-
-        # The test_database has to be done in synchronous time at the end
-        # otherwise there is a too high risk that test happens on trained data
+        size_dtb = len(df_historic.index)
         idx_cut_train_test = int(ratio_train_test*size_dtb)
         train_arr = df_arr_normalized[:idx_cut_train_test]
         test_arr = df_arr_normalized[idx_cut_train_test:]
 
-        def get_evolution(future):
-            # Estimate evolution of one crypto
-            # 1rst column: crypto where money is already
-            # 2nd column: possible better crypto at this timing
+        ### DETERMINE FUTURE EVOLUTION OF CRYPTOS (only for train)
+        def get_evolution(historic_array):
+            # For each crypto (column), determine the best/worst evolution
+            # in the future
             # TODO
-            return 0
+            evolution_array = np.zeros(np.shape(historic_array))
+            return evolution_array
 
-        def get_new_experience(array, columns_cryptos, indexes_start_time):
-            idx_present = indexes_start_time+self.duration_historic
-            state = array[indexes_start_time:idx_present, columns_cryptos]
-            future = array[idx_present:idx_present+self.duration_future, columns_cryptos]
-            # From future: estimate reward based on evolution of prices
-            evolution = get_evolution(future)
-            return {'state': state, 'next_state':future[0,:], 'evolution': evolution}
+        ### DEFINITION OF EXPERIENCES
+        def get_synchronous_experiences(array, evolution=None): # For train + test
+            
+            experiences = []
+            evolution_predict = None
+            for idx_start_time in range(np.shape(array)[0]-self.duration_historic-self.duration_future):
+                
+                idx_present = idx_start_time+self.duration_historic
+                state = array[idx_start_time:idx_present, :]    # State
+                next_state = array[idx_present, :]              # Next iteration of state
 
-        # TEST EXPERIENCE: This one, each timing contains 
-        test_experience = []
-        len_test = np.shape(train_arr)[0]
-        for idx_start_time in range(0, len_test-self.duration_historic-self.duration_future):
-            idx_cryptos = list(range(nb_cryptos))
-            all_combinations = list(itertools.product([idx_cryptos, idx_cryptos]))
-            for idx_cryptos in all_combinations:
-                # Only syncrhonous time between cryptos for test
-                indexes_start_time = idx_start_time*np.ones(shape(idx_cryptos))
-                test_experience.append(get_new_experience(test_arr, idx_cryptos, indexes_start_time))
+                if evolution is not None: # In train mode
+                    evolution_predict = evolution[idx_present-1,:]
+                experiences.append({'state': state, 'next_state':next_state, 'evolution': evolution_predict})
 
-        # TRAIN EXPERIENCE
-        idx_cryptos = list(range(nb_cryptos))
-        all_combinations = list(itertools.product([idx_cryptos, idx_cryptos]))
+            return experiences
+                
+        def get_unsynchronous_experiences(array, nb_experience, evolution=None): # Only for train
+            
+            if nb_experience == 0:
+                return None
+            if evolution is None:
+                raise ValueError('evolution shall not be null for unsynchronous experiences')
 
-        train_experience = []
-        len_train = np.shape(train_arr)[0]
-        ### Start with synchronous steps
-        for idx_start_time in range(0, len_train-self.duration_historic-self.duration_future): 
-            for idx_cryptos in all_combinations:
-                indexes_start_time = idx_start_time*np.ones(shape(idx_cryptos))
-                train_experience.append(get_new_experience(train_arr, idx_cryptos, indexes_start_time))
-        
-        ### Then add asynchrnonous steps
-        len_synchronized_train = len(train_experience)
+            experiences = []
+            evolution_predict = None
+            Range_t = list(range(0, np.shape(array)[0]-self.duration_historic-self.duration_future))
+            nb_crypto = np.shape(array)[1]
+
+            for i in range(nb_experience):
+                ### Choose random timing for each crypto
+                idx_time = random.sample(Range_t, nb_crypto)
+                state = np.zeros((self.duration_historic, nb_crypto))
+                next_state = np.zeros((nb_crypto, ))
+                evolution_predict = np.zeros((nb_crypto, ))
+
+                for j in range(nb_crypto):
+                    idx_present_crypto = idx_time[j] + self.duration_historic
+                    state[:,j] = array[idx_time[j]:idx_present_crypto, j]                               # State
+                    next_state[j] = array[idx_time[j] + self.duration_historic, j]                      # Next iteration of state
+                    evolution_predict[j] = evolution[idx_time[j] + self.duration_historic-1,j]   # Evolution related to reward
+
+                experiences.append({'state': state, 'next_state':next_state, 'evolution': evolution_predict})
+
+            return experiences
+
+        ### GENERATION OF TRAIN
+        #### Synchronous
+        evolution_train = get_evolution(train_arr) # Only train, not necessary for test
+        exp_sync_train = get_synchronous_experiences(train_arr, evolution=evolution_train)
+
+        #### Unsynchronous
+        len_synchronized_train = len(exp_sync_train)
         nb_train_asynchronous = int(len_synchronized_train/ratio_unsynchrnous_time)
-        for _ in range(nb_train_asynchronous):
-            # Define random start time + cryptos
-            idx_cryptos = np.randomchoose(all_combinations)
-            indexes_start_time = int((len_train-self.duration_historic-self.duration_future) * np.random(shape(idx_cryptos)))
-            train_experience.append(get_new_experience(train_arr, idx_cryptos, indexes_start_time))
+        exp_unsync_train = get_unsynchronous_experiences(train_arr, nb_train_asynchronous, evolution=evolution_train)
 
-        self.train_experience = train_experience
-        self.test_experience = test_experience
+        experiences_train =  random.shuffle(exp_sync_train + exp_unsync_train)
+
+        ### GENERATION OF TEST
+        experiences_test = get_synchronous_experiences(test_arr, evolution=None)
+
+        self.train_experience = experiences_train
+        self.test_experience = experiences_test
         if verbose:
             print('Train/test database generated')
 
     def update_real_time_state(self, real_time):
-        # TODO: Include normailzation
+        # TODO: Include normalization
         self.real_time_state = state
+
     
     def reset(self): #Reset state standardized as Gym
-        if self._mode is 'train':
+        if self._mode == 'train':
             # Need to get randomly a new experience
-            self.last_experience = np.randomchoose(self.curent_experiences)
+            self.last_experience = random.shuffle(self.curent_experiences)
             self._ctr+=1
+            self.current_crypto = random.choice(list(range(self)))
 
-        elif self._mode is 'test':
+        elif self._mode == 'test':
             self.last_experience = self.curent_experiences[self._ctr]
             self._ctr+=1
 
@@ -191,7 +216,7 @@ class Environment_Crypto(object):
 
 class DQN_Algo(object):
 
-    def __init__(self, df_historic=None
+    def __init__(self, df_historic=None,
                     duration_historic=120, prc_taxes=0.01,
                     duration_future = 60,
                     loading_model=True, mode = None):
@@ -206,8 +231,11 @@ class DQN_Algo(object):
         USE_DOUBLE_DQN = True
         USE_SOFT_UPDATE = True
         USE_PER = True
-        self.agent = DQN_Agent(env, loading_model=loading_model, name_model=path_best_Model, # In case of loaded model
-                                    layers_model = LAYERS_MODEL # In case of new model
+
+        state_size = (self.duration_historic, 2)
+        action_size = (2,)
+        self.agent = DQN_Agent(state_size, action_size, loading_model=loading_model, name_model=path_best_Model, # In case of loaded model
+                                    layers_model = LAYERS_MODEL, # In case of new model
                                         use_PER=USE_PER, use_double_dqn=USE_DOUBLE_DQN, use_soft_update=USE_SOFT_UPDATE)
 
         possible_modes = ['train_test', 'real-time']
@@ -228,7 +256,79 @@ class DQN_Algo(object):
         # Set environment to Train mode + Generate Train/Test Database
         self.env.reset_mode('train')
 
+        # LOOP Episode
+        nb_episodes = len(self.train_experience)
+        nb_cryptos = nb.shape(self.train_experience('state'))[1]
+
+        for ctr_episode in range(nb_episodes):
+            
+            ###########################################
+            ### RESET OF EPISODE
+            ###########################################
+            part_state = self.env.reset() # Reset environment to new state
+            current_crypto = random.choice(list(range(nb_cryptos))) # Choose randomly the currently used crypto
+
+            state = part_state + [current_crypto]
+            
+            ###########################################
+            ### DETERMINE BEST ACTION for multiple cryptos
+            ###########################################
+            order_comparison = random.shuffle([c for c in range(nb_cryptos) if c != current_crypto])
+
+            has_taxes = True
+            for idx_crypto_compared in order_comparison: # Study each cryptos to determine the best one
+                action = self.agent.get_action_training(state)
+                new_state, reward, done, _ = self.env.step(action)
+                transition = (state, action, reward, new_state, done)
+                state = new_state
+                loss = self.agent.memorize(transition)
+                episode_reward += reward
+                episode_loss += loss
+
+            if step>nb_steps_varmup and step%delta_train==0:
+                self.agent.fit()
+            if done:
+                # print the score and break out of the loop
+                print("episode: {}, Prc_training:, {:.2f}%, score: {}"
+                    .format(episode, step/nb_steps*100, episode_reward))
+
+
+            episode+=1
+
+            # Restarting episode - Environment
+            episode_reward = 0
+            episode_loss = 0
+            state = self.env.reset()
+            done = False
+            
+            # LOOP Step
+            while not done:       
+                step+=1
+                # Determine action to do     
+                
+                
+                
+                
+
+                
+            
+            # END Episode   
+            # DISPLAY HISTORIC
+            if verbose==1:
+                Disp.display_historic(self.agent.epsilon, episode_reward, episode_loss) 
+
+            # SAVE MODEL
+            if delta_save>0 and not step % delta_save: # and min_reward >= MIN_REWARD:
+                self.agent.save_weights(name_model, overwrite=True)
+            
+        ### END OF EPISODES/TRAINING
+        self.env.close()
+        # np.save('historic_reward', ep_rewards)
+        self.agent.save_weights(name_model,overwrite=True)
+
         # Training algorithm by simulating evolution of crypto
+        
+
         pass
 
     def test(self, portfolio, df_historic, verbose=0):
@@ -491,29 +591,13 @@ def deriv_filter(x, nb_delay):
 
 if __name__ == '__main__':
 
-    CRYPTO_STUDY_FILE = os.path.join(config.DATA_DIR, 'dtb/CRYPTO_STUDIED.json')
-    STORE = os.path.join(config.DATA_DIR, 'dtb/store.h5')
-    store = pd.HDFStore(STORE)
-    df = store['min']
-
-    # Take only crypto included inside Crypto_file
-    with open(CRYPTO_STUDY_FILE) as f:
-        data = json.load(f)
-        crypto_study = [d['coinbase_name'] for d in data]
-    crypto_to_remove = [c for c in df.columns if c not in crypto_study]
-    df = df.drop(columns=crypto_to_remove)
-
     env = Environment_Crypto()
-    env.generate_training_environment(df)
-    
-    # #Cut
-    # print('Cut done on database')
-    # df = df.head(3500)
+    env.generate_train_test_environment()
 
-    Ptf = Portfolio()
-    Ptf['USDC-USD']['last-price'] = 1
-    Ptf.add_money(50, need_confirmation=False)
-    Algo = Simple_Algo()
+    # Ptf = Portfolio()
+    # Ptf['USDC-USD']['last-price'] = 1
+    # Ptf.add_money(50, need_confirmation=False)
+    # Algo = Simple_Algo()
 
     ##################################
     ### Test on database
@@ -521,7 +605,6 @@ if __name__ == '__main__':
     # Algo.test(Ptf, df, verbose=True)
     ##################################
     ### Loop in real time
-    Algo.loop_RealTime(Ptf)
+    # Algo.loop_RealTime(Ptf)
     ##################################
-    a=1
     

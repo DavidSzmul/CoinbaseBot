@@ -32,12 +32,26 @@ class Environment_Crypto(object):
         self.duration_historic = duration_historic
         self.duration_future = duration_future
         self.prc_taxes = prc_taxes
+        self.cryptos_name = []
+
+        ## Experiences
         self.train_experience = []
         self.test_experience = []
         self.curent_experiences = None
-        self.current_crypto = 0 # Index of chosen crypto
         self.normalizer = None
         self._mode = None
+
+        ## State of Environment
+        self.current_crypto = 0     # Index of chosen crypto
+        self.has_taxes = True       # State that taxes are to include during comparison of 2 cryptos
+        self.order_comparison = []  # Order to compare crypto by crypto
+        self.nb_cryptos = 0
+        self.state = None
+        self.next_state = None
+        self.reward = None
+        self.done = False
+
+        ## Reinitialization Mode
         self.reset_mode(mode)
 
     def reset_mode(self, mode):
@@ -64,6 +78,7 @@ class Environment_Crypto(object):
         self._ctr = 0
         self.last_experience = {'state': None, 'next_state':None, 'evolution': None}
 
+    #TODO
     def _fit_normalizer(self, df_historic):
         
         # Need to normalize data in order to effectively train.
@@ -73,7 +88,13 @@ class Environment_Crypto(object):
         # TODO
         # Or maybe use diff_prc, already normalized
 
-    def generate_train_test_environment(self, flag_regenerate=True
+    #TODO
+    def _normalize(self, states):
+        # TODO
+        # Normalization of state (used for train/test/real-time state)
+        return self.normalizer.transform(states.to_numpy())
+
+    def generate_train_test_environment(self, flag_regenerate=True,
                                         ratio_unsynchrnous_time = 0.66, # 2/3 of of training is unsychronous to augment database
                                         ratio_train_test = 0.8, verbose=1): 
 
@@ -81,19 +102,20 @@ class Environment_Crypto(object):
         if verbose:
             print('Loading of Historic of cryptos...')
         df_historic = config.load_df_historic('min')
-        
-        ### NORMALIZE
+        self.cryptos_name = list(df_historic.columns)  
+        self.nb_cryptos = len(self.cryptos_name)
+
+        ### PREPARE NORMALIZATION
         if verbose:
             print('Normalization of database...')
         self._fit_normalizer(df_historic)
-        if not flag_regenerate:
+        if not flag_regenerate: # No need to create new train/test env
             return
 
         ### CUT TRAIN/TEST DTB
         if verbose:
             print('Generation of train/test database...')
-        cryptos = list(df_historic.columns)  
-        df_arr_normalized = self.normalizer.transform(df_historic.to_numpy())
+        df_arr_normalized = self._normalize(df_historic)
         size_dtb = len(df_historic.index)
         idx_cut_train_test = int(ratio_train_test*size_dtb)
         train_arr = df_arr_normalized[:idx_cut_train_test]
@@ -173,12 +195,20 @@ class Environment_Crypto(object):
         if verbose:
             print('Train/test database generated')
 
-    def update_real_time_state(self, real_time):
+    def update_real_time_state(self, real_time_state):
         # TODO: Include normalization
-        self.real_time_state = state
+        self.real_time_state = real_time_state
 
     
-    def reset(self): #Reset state standardized as Gym
+    def reset(self, current_crypto=None): #Reset state standardized as Gym
+
+        if (current_crypto != None):
+            self.current_crypto = current_crypto    # Index of chosen crypto
+        self.has_taxes = True                       # State that taxes are to include during comparison of 2 cryptos
+        self.ctr_studied_crypto = 0                 # Counter of studied crypto for one timing
+        self.done = False
+        
+        self.order_comparison = random.shuffle([c for c in range(self.nb_cryptos) if c != self.current_crypto])
         if self._mode == 'train':
             # Need to get randomly a new experience
             self.last_experience = random.shuffle(self.curent_experiences)
@@ -189,8 +219,12 @@ class Environment_Crypto(object):
             self.last_experience = self.curent_experiences[self._ctr]
             self._ctr+=1
 
-        # In real-time mode: last-experiene is updated by the user       
-        return self.last_experience['state']
+        # State at initialization
+        self.state = self.last_experience['state'][:,[self.current_crypto, self.order_comparison[self.ctr_studied_crypto]]]
+        self.ctr_studied_crypto+=1
+
+        # In real-time mode: last-experience is updated by the user       
+        return self.state
 
     def step(self, action):
         # Depending on action of Agent, return new state + reward
@@ -273,7 +307,7 @@ class DQN_Algo(object):
             ###########################################
             ### DETERMINE BEST ACTION for multiple cryptos
             ###########################################
-            order_comparison = random.shuffle([c for c in range(nb_cryptos) if c != current_crypto])
+            
 
             has_taxes = True
             for idx_crypto_compared in order_comparison: # Study each cryptos to determine the best one

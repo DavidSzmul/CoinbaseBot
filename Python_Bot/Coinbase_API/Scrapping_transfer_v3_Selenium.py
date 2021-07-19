@@ -21,11 +21,11 @@ dict_id = {
     'to': "[data-element-handle='convert-to-selector']",
     # 'grid': '.dpKzAY', # Obsolete ?
     'grid': '.gLLsql',
+    'crypto_descritpion': ".cds-typographyResets-tjmople.cds-body-b5itfzw.cds-foreground-f1itepcl.cds-transition-ty35lnf.cds-start-s1q2d0t0.cds-truncate-t1hgsao8",
     'preview': '.isVEuC',
     'confirm': '.isVEuC',
     'consult': '.jwGeTR'
 }
-
 def try_(fcn):
     try:
         fcn
@@ -75,39 +75,49 @@ class AutoSelector(object):
         self.driver.find_element_by_id("password").send_keys(self.coinbase_enc.decrypt_pswd())
         self.driver.find_element_by_id("stay_signed_in").click()
         self.driver.find_element_by_id("signin_button").click()
-        time.sleep(2) #Need to wait before doing 1rst transfer
 
     def convert(self, from_, to_, ammount):
         self._wait(dict_id['buy_sell'], idx_list=0).click()
-        time.sleep(4)
-        print('DEBUG SCRAPPING: High timiing due to low internet')
+        time.sleep(2) # High timiing due to low internet')
         for c in self._wait(dict_id['convert'], unique_=False): # Multiple object with same properties, try all of them
             try:
                 c.click()
                 break
             except:
                 continue
+        time.sleep(2) # High timiing due to low internet')
         self._wait(dict_id['ammount'],idx_list=1).send_keys(ammount)
 
         def click_on_crypto(crypto):
             NB_DIV_PER_CRYPTO = 3
             IDX_CRYPTO_NAME = 1
             MAX_DELAY = 5
-            grid = self._wait(dict_id['grid'])
-            divList = self._wait('div', obj=grid, unique_=False) 
-            childs_crypto = [divList[i] for i in range(len(divList)) if i%NB_DIV_PER_CRYPTO==IDX_CRYPTO_NAME] # Child containing name of crypto
-            
+
+            ### OBSOLETE
+            # grid = self._wait(dict_id['grid'])
+            # v = self._wait('div', obj=grid, unique_=False) 
+            # childs_crypto = [divList[i] for i in range(len(divList)) if i%NB_DIV_PER_CRYPTO==IDX_CRYPTO_NAME] # Child containing name of crypto
+            # while True:
+            #     if time.time()-t_start>=MAX_DELAY:
+            #         raise ConnectionError('Page is not loading to find crypto')
+            #     if all([c.find_element_by_tag_name('p').text!='' for c in childs_crypto]):
+            #         break
+
+            crypto_descritpions = self._wait(dict_id['crypto_descritpion'], unique_=False)
+
             # Wait while name is not empty (time for loading page)
             t_start = time.time()
             while True:
                 if time.time()-t_start>=MAX_DELAY:
                     raise ConnectionError('Page is not loading to find crypto')
-                if all([c.find_element_by_tag_name('p').text!='' for c in childs_crypto]):
+                if all([c.text!='' for c in crypto_descritpions]):
                     break
 
+            
+            
             # Check if name of crypto corresponds then return
-            for c in childs_crypto:
-                if c.find_element_by_tag_name('p').text==crypto:
+            for c in crypto_descritpions:
+                if c.text==crypto:
                     c.click()
                     time.sleep(0.5)
                     return 
@@ -160,6 +170,7 @@ class AutoSelector(object):
 if __name__=="__main__":
     # First Connection
     autoSelect = AutoSelector(first_connection=False)
+    time.sleep(4) #Need to wait before doing 1rst transfer
     conversion_done =  try_(autoSelect.convert('ETH', 'BTC', 5)) 
     # print(conversion_done)
     # conversion_done =  autoSelect.convert('BTC', 'ETH', 5)

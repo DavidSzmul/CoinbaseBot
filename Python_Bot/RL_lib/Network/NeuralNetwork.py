@@ -18,7 +18,6 @@ class NetworkGenerator(object):
         model.add(Dense(layers[0], activation='relu', input_shape=state_shape))
         for layer in layers[1:]:
             model.add(Dense(layer, activation='relu'))
-
         model.add(Dense(action_shape, activation='linear'))
         model.compile(loss="mse", optimizer=Adam(lr=learning_rate), metrics=['accuracy'])
         return model

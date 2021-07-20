@@ -2,16 +2,23 @@ import random
 from collections import deque
 import numpy as np
 from dataclasses import dataclass
-from ABC import abc, abstractmethod
+from abc import ABC, abstractmethod
 
 @dataclass
 class Experience:
-    """Class for defining experience used for training RL Agent"""
+    """Class to define experience used for training RL Agent"""
     state: np.ndarray
     action: np.ndarray      # Can be int for Agent as DQN
     next_state: np.ndarray
     reward: float
+    done: bool
     error: float # Only used for Double QN
+
+@dataclass
+class DataMemoryUpdate:
+    """Class to define input to update memory"""
+    indexes: list
+    errors: List[float]
 
 class Memory(ABC):
     """Abstract Class to define memory used for training RL Agent"""
@@ -25,7 +32,7 @@ class Memory(ABC):
         '''Choose randomly experiences on memory'''
 
     @abstractmethod
-    def update(self, data: float = None):
+    def update(self, data: DataMemoryUpdate):
         '''Update the preselection of memory for next sample'''
 
     @abstractmethod
@@ -43,9 +50,9 @@ class SimpleMemory(Memory):
 
     def sample(self, batch_size: int):
         batch = random.sample(self.buffer, batch_size)
-        return batch
+        return batch, None
 
-    def update(self, data: float = None):
+    def update(self, data: DataMemoryUpdate):
         pass # No preselection for SimpleMemory
 
     def __len__(self):
@@ -62,7 +69,7 @@ class PER:
         self.max_size = max_size
         self.tree = SumTree(self.max_size)
         
-    def _getPriority(self, error: Experience):
+    def _getPriority(self, error: float):
         return (error + self.e) ** self.a
 
     def add(self, experience: Experience):
@@ -84,9 +91,11 @@ class PER:
             idxs.append(idx)
         return batch, idxs
 
-    def update(self, idx, error):
-        p = self._getPriority(error)
-        self.tree.update(idx, p)
+    def update(self, data: DataMemoryUpdate):
+        # update priority
+        for idx, error in zip(data.indexes, data.errors):
+            p = self._getPriority(error)
+            self.tree.update(idx, p)        
 
     def __len__(self):
         return self.size

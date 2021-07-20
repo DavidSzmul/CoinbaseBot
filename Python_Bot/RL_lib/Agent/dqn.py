@@ -1,23 +1,30 @@
 import numpy as np
-from collections import deque
-import random
-import tensorflow as tf
-import keras
+from dataclasses import dataclass
 from keras.models import Sequential, load_model, save_model
-from keras.layers import Dense
-from keras.optimizers import Adam
 
-from RL_lib.Memory import Memory, PER
-from RL_lib.Environment import Environment
+from RL_lib.Memory.Memory import SimpleMemory, PER
+from RL_Lib.Network.NeuralNetwork import NetworkGenerator
 
+@dataclass
+class DQN_parameters:
+    '''Class containing all parameters intrinsect to DQN Agent'''
+    gamma: float=0.99               # Discount factor related to possible future reward
+    epsilon_min: float= 0.01
+    epsilon_decay: float= 0.9995
+    learning_rate: float=1e-3
+    tau: float = 1e-2
+    use_double_dqn: bool= True
+    use_soft_update: bool=False
+    use_PER: bool=True
+    memory_size: int=50000,
+    batch_size:int=32
 
 class DQN_Agent:
-    def __init__(self, state_size, action_size
-    automatic_model=True, layers_model = [32, 32], # In case of auto-generated model
-    loading_model=False, name_model='', model=None,   # In case of loaded model (or model directly)
-    gamma=0.99, epsilon_min = 0.01, epsilon_decay = 0.9995, learning_rate=1e-3, tau = 1e-2,
-    use_double_dqn = True, use_soft_update=False,
-    memory_size=50000, use_PER=True, batch_size=32):
+    """Agent using Deep Q Learning"""
+    def __init__(self, state_shape: np.ndarray, action_size: np.ndarray,
+    automatic_model: bool= True, layers_model: List[int]= [32, 32],      # In case of auto-generated model
+    loading_model: bool= False, name_model: str ='', model=None,   # In case of loaded model (or model directly)
+    ):
 
         # DQN Parameters
         self.gamma = gamma  # discount rate
@@ -37,7 +44,8 @@ class DQN_Agent:
         if self.use_PER:
             self.memory = PER(memory_size)
         else:
-            self.memory = Memory(memory_size)
+            self.memory = SimpleMemory(memory_size)
+
         self.batch_size = batch_size
 
         # Variables

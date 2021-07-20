@@ -8,12 +8,11 @@ python -m pip install --upgrade pip
 
 * Install Requirement txt or normal version
 python -m pip install -r requirements.txt
-OR
-python -m pip install tensorforce
 
 * Tensorflow version:
 Problem of GPU with version 2.3.1
-Try downgrade 2.2.0
+Downgrade to 2.2.0
+python -m pip install -r requirements.txt
 
 * Installation of TF-GPU
 Install CUDA + Set Path of CUDA in cmd

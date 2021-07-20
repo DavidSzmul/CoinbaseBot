@@ -1,48 +1,65 @@
 import numpy as np
-from collections import deque
-import random
-import tensorflow as tf
+from dataclasses import dataclass
 import keras
-from keras.models import Sequential, load_model, save_model
-from keras.layers import Dense
-from keras.optimizers import Adam
 
-from RL_lib.Memory import Memory, PER
-from RL_lib.Environment import Environment
+from RL_lib.Memory.Memory import Experience, DataMemoryUpdate, SimpleMemory, PER
+from RL_Lib.Network.NeuralNetwork import NetworkGenerator
 
+@dataclass
+class DQN_parameters:
+    '''Class containing all parameters intrinsect to DQN Agent'''
+    gamma: float=0.99               # Discount factor related to possible future reward
+    epsilon_min: float=0.01         # Minimum random action ratio (only for train)
+    epsilon_decay: float=0.9995     # Decay for random action (only for train)
+    learning_rate: float=1e-3       # learning rate of NN weights
+    tau: float=1e-2                 # 1rst order pole to update target weights 
+    use_double_dqn: bool=True       # Double DQN Activation
+    use_soft_update: bool=True      # Soft-update Activation (Hard if false)
+    use_PER: bool=True              # PER for Memory
+    memory_size: int=50000          # Size of Memory         
+    batch_size: int=32              # Batch size of Memory
+
+    epsilon_err = 1e-5              # Epsilon to clip reward stricly inferior to [-1,1]
 
 class DQN_Agent:
-    def __init__(self, state_size, action_size
-    automatic_model=True, layers_model = [32, 32], # In case of auto-generated model
-    loading_model=False, name_model='', model=None,   # In case of loaded model (or model directly)
-    gamma=0.99, epsilon_min = 0.01, epsilon_decay = 0.9995, learning_rate=1e-3, tau = 1e-2,
-    use_double_dqn = True, use_soft_update=False,
-    memory_size=50000, use_PER=True, batch_size=32):
+    """Agent using Deep Q Learning"""
 
-        # DQN Parameters
-        self.gamma = gamma  # discount rate
-        self.epsilon_min = epsilon_min # Minimum Exploration
-        self.epsilon_decay = epsilon_decay # Exploration decay
-        self.learning_rate = learning_rate # learning rate of objective
-        self.tau = tau 
+    update_model
+    update_target
 
-        self.use_soft_update=use_soft_update
-        self.use_double_dqn = use_double_dqn
-        self.use_PER = use_PER
-        
+    def __init__(self, state_shape: np.ndarray, action_size: np.ndarray,
+    automatic_model: bool= True, layers_model: List[int]= [32, 32],      # In case of auto-generated model
+    loading_model: bool= False, name_model: str ='', model=None,        # In case of loaded model (or model directly)
+    params: DQN_parameters = DQN_parameters()):
+
         # Global Parameters
         self.state_size = state_size
         self.action_size = action_size
 
-        if self.use_PER:
+        # DQN Parameters
+        self.params = params
+
+        # Memory
+        if self.params.use_PER:
             self.memory = PER(memory_size)
         else:
-            self.memory = Memory(memory_size)
-        self.batch_size = batch_size
+            self.memory = SimpleMemory(memory_size)
 
+        # Update Function (depending if DQN or DDQN)
+        if self.params.use_double_dqn:
+            self.update_model = self.Double_DQN_update
+        else:
+            self.update_model = self.DQN_update
+
+        # Hard or soft update target
+        if self.params.use_soft_update:
+            self.update_target = self.soft_update_target
+        else:
+            self.update_target = self.hard_update_target
+        
         # Variables
         self.epsilon = 1.0  # exploration rate (variable)
-        self.target_update_ctr = 0 # Used to count when to update target network with main network's weights
+        self.target_update_ctr = 0 # Used for hard target update
 
         # Model for DQN
         if loading_model: # Load Existing Model
@@ -54,32 +71,30 @@ class DQN_Agent:
         else: # Or directly in input
             assert model is not None, 'No model set in input'
             self.model = model
+
         # Generate target
-        self.target_model=tf.keras.models.clone_model(self.model)
+        self.target_model=keras.models.clone_model(self.model)
         self.target_model.set_weights(self.model.get_weights()) 
 
         
-    def _build_model(self, layers_model):
+    def _build_model(self, layers_model: List[int]):
         # Neural Net for Deep-Q learning Model
-        model = Sequential()
-        model.add(Dense(layers_model[0], activation='relu', input_shape=self.state_size))
-        for layer in layers_model[1:]:
-            # model.add(BatchNormalization()) # Batch Normalization is source of divergence for Reinforcement Learning
-            model.add(Dense(layer, activation='relu'))
-        model.add(Dense(self.action_size, activation='linear'))
-        model.compile(loss="mse", 
-                      optimizer=Adam(lr=self.learning_rate), metrics=['accuracy'])
-        return model
+        return NetworkGenerator().create_DQN_Model(self.state_shape, self.action_shape, 
+                                layers=layers_model, learning_rate=self.params.learning_rate)
 
-    def memorize(self, experience):
-        state = experience[0]
-        action = experience[1]
-        reward = experience[2]
-        next_state = experience[3] 
-        done = experience[4]
+    def _clip_reward(reward: float) -> float:
+        #Clip of reward
+        return np.clip(reward, -1+self.params.epsilon_err, 1-self.params.epsilon_err)
+
+    def memorize(self, experience: Experience):
+        state = experience.state
+        action = experience.action
+        reward = experience.reward
+        next_state = experience.next_state 
+        done = experience.done
 
         #Clip of reward
-        reward=np.clip(reward, -1, 1)
+        reward=self._clip_reward(reward)
 
         Q_model = self.model.predict(np.array([state]))[0]
         Q_next_target = self.target_model.predict(np.array([next_state]))[0] #Target model
@@ -89,55 +104,48 @@ class DQN_Agent:
         if done:
             Q_model[action] = reward
         else:
-            Q_model[action] = reward + self.gamma * max(Q_next_target)   
+            Q_model[action] = reward + self.params.gamma * max(Q_next_target)   
         error = sum(pow(Q_model - old_Q, 2))/len(Q_model) 
 
-        if not self.use_PER:
-            self.memory.add(experience)
-        else: 
-            self.memory.add(experience, error)
+        # Add error to experience
+        experience.error = error
+        self.memory.add(experience)
         return error
 
     # Trains main network every step during episode
     def fit(self):
 
-        # Start training only if certain number of samples is already saved
+        # Wait for warmup
         if len(self.memory) < self.batch_size:
             return
 
-        if self.use_PER:   
-            mini_batch, idx_memory = self.memory.sample(self.batch_size)
-        else:
-            mini_batch = self.memory.sample(self.batch_size)
-
-        if self.use_double_dqn:
-            states, Q_model, errors =self.Double_DQN_update(mini_batch)
-        else:
-            states, Q_model, errors =self.DQN_update(mini_batch)
+        # Sample experiences + train model
+        mini_batch, idx_memory = self.memory.sample(self.batch_size)
+        states, Q_model, errors =self.update_model(mini_batch)
         self.model.fit(states, Q_model, batch_size=self.batch_size, epochs=1, verbose=0)
 
-        if self.use_PER:
-            # update priority
-            for i in range(self.batch_size):
-                self.memory.update(idx_memory[i], errors[i])
+        # Update Memory based on training
+        data_update = DataMemoryUpdate(idx_memory, errors)
+        self.memory.update(data_update)            
 
-        # Update Target from Model Parameters
+        # Update Target from Model (Hard or Soft)
         self.update_target()
+
         # Update Exploration epsilon number
         self.epsilon = max(self.epsilon*self.epsilon_decay, self.epsilon_min) 
     
-    def DQN_update(self, mini_batch):
-        states = np.array([experience[0] for experience in mini_batch])
-        action = np.array([experience[1] for experience in mini_batch])
-        reward = np.array([experience[2] for experience in mini_batch])
-        next_states = np.array([experience[3] for experience in mini_batch])
-        done = np.array([experience[4] for experience in mini_batch])
+
+    def DQN_update(self, mini_batch: List[Experience]):
+        states = np.array([experience.state for experience in mini_batch])
+        action = np.array([experience.action for experience in mini_batch])
+        reward = np.array([experience.reward for experience in mini_batch])
+        next_states = np.array([experience.next_state for experience in mini_batch])
+        done = np.array([experience.done for experience in mini_batch])
         errors = np.zeros(len(mini_batch))
 
         #Clip of reward
-        epsilon_err = 1e-4 # To avoid divergence due to precision of float
-        reward=np.clip(reward, -1+epsilon_err, 1-epsilon_err)
-        
+        reward=self._clip_reward(reward)
+
         Q_model = self.model.predict(states)
         Q_next_target = self.target_model.predict(next_states) #Target model
         old_Q = np.copy(Q_model)
@@ -159,16 +167,15 @@ class DQN_Agent:
 
     
     def Double_DQN_update(self, mini_batch):
-        states = np.array([transition[0] for transition in mini_batch])
-        action = np.array([transition[1] for transition in mini_batch])
-        reward = np.array([transition[2] for transition in mini_batch])
-        next_states = np.array([transition[3] for transition in mini_batch])
-        done = np.array([transition[4] for transition in mini_batch])
+        states = np.array([experience.state for experience in mini_batch])
+        action = np.array([experience.action for experience in mini_batch])
+        reward = np.array([experience.reward for experience in mini_batch])
+        next_states = np.array([experience.next_state for experience in mini_batch])
+        done = np.array([experience.done for experience in mini_batch])
         errors = np.zeros(len(mini_batch))
 
         #Clip of reward
-        epsilon_err = 1e-4 # To avoid divergence due to precision of float
-        reward=np.clip(reward, -1+epsilon_err, 1-epsilon_err)
+        reward=self._clip_reward(reward)
 
         Q_model = self.model.predict(states)
         #DEBUG
@@ -188,19 +195,19 @@ class DQN_Agent:
 
             # Error is MSE error (but only change on 1 with DQN)
             errors[i] = sum(pow(Q_model[i] - old_Q[i], 2))/len(Q_model[i])
-
         return (states, Q_model, errors)
 
-    def update_target(self):
-        if self.use_soft_update:
-            for t, m in zip(self.target_model.trainable_variables, 
-                            self.model.trainable_variables):
-                            t.assign(t * (1 - self.tau) + m * self.tau)
-        else: #Hard update
-            self.target_update_ctr+=1
-            if self.target_update_ctr%int(1/self.tau)==0:
-                self.target_model.set_weights(self.model.get_weights()) 
-                self.target_update_ctr=0
+    def hard_update_target(self):
+        self.target_update_ctr+=1
+        if self.target_update_ctr%int(1/self.tau)==0:
+            self.target_model.set_weights(self.model.get_weights()) 
+            self.target_update_ctr=0
+
+    def soft_update_target(self):
+        for t, m in zip(self.target_model.trainable_variables, 
+                        self.model.trainable_variables):
+                        t.assign(t * (1 - self.tau) + m * self.tau)
+            
 
     # Queries main network for Q values given current observation space (environment state)
     def get_qs(self, state):
@@ -216,8 +223,7 @@ class DQN_Agent:
             return self.get_action(state)
         else:
             # Get random action
-            # return self.env.action_space.sample() # ONLY if environment linked to class
-            # ONLY FOR discrete events for the moment
+            # ONLY FOR discrete events (as DQN)
             return random.choice(list(range(self.action_size)))
 
     def save_weights(self, filepath, overwrite=False):

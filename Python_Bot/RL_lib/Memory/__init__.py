@@ -1,1 +1,1 @@
-from library.Memory.Memory import Memory, PER
+from RL_lib.Memory.Memory import SimpleMemory, PER

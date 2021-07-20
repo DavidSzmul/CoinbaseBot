@@ -195,8 +195,10 @@ class Environment_Crypto(object):
         if verbose:
             print('Train/test database generated')
 
-    def update_real_time_state(self, real_time_state):
+    def get_real_time_experience(self):
         # TODO: Include normalization
+        # Process to get all new cryptos
+        
         self.real_time_state = real_time_state
 
     
@@ -219,9 +221,11 @@ class Environment_Crypto(object):
             self.last_experience = self.curent_experiences[self._ctr]
             self._ctr+=1
 
+        elif self._mode == 'real-time':
+            self.last_experience = self.get_real_time_experience()
+
         # State at initialization
-        self.state = self.last_experience['state'][:,[self.current_crypto, self.order_comparison[self.ctr_studied_crypto]]]
-        self.ctr_studied_crypto+=1
+        self.state = self.last_experience['state'][:,[self.current_crypto, self.order_comparison[self.ctr_studied_crypto]]] + [self.has_taxes]
 
         # In real-time mode: last-experience is updated by the user       
         return self.state
@@ -229,23 +233,28 @@ class Environment_Crypto(object):
     def step(self, action):
         # Depending on action of Agent, return new state + reward
         info = None
-        done = False
         reward = None
+        self.next_state = None
 
-        new_state = self.last_experience['next_state']
-        if (self.curent_experiences is not None) and (self._ctr>=len(self.curent_experiences)): # Train or test is finished
-            done=1
-
-        def get_reward(action, evolution):
-            # The action to switch (action=1) is relevant only if evolution of change is better
-            # than the taxes caused by switching
-            # TODO: Maybe need to take into account if taxe exists or not (depending if switching is already made ?)
-            return evolution - (action>0)*self.prc_taxes
-
+        # Get reward depending on action + evolution
+        def get_reward(action, evolution, index_current, index_compare):
+            # The action to switch (action=1) is relevant only if evolution of change is better than the taxes caused by switching
+            return pow(-1,(action>0)) * (evolution[index_current] - evolution[index_compare]) - self.has_taxes*self.prc_taxes
         if self._mode == 'train':
-            reward = get_reward(action, self.last_experience['evolution'])
+            reward = get_reward(action, self.last_experience['evolution'], self.current_crypto, self.order_comparison[self.ctr_studied_crypto])
         
-        return new_state, reward, done, info
+        # Get next state (next sutdied crypto)
+        flag_change_crypto = (action>0)
+        if flag_change_crypto:
+            self.current_crypto = self.order_comparison[self.ctr_studied_crypto]
+
+        done = (self.ctr_studied_crypto >= len(self.order_comparison))
+        if not done:
+            self.has_taxes = (self.has_taxes and not flag_change_crypto)
+            self.ctr_studied_crypto+=1
+            self.next_state = self.last_experience['state'][:,[self.current_crypto, self.order_comparison[self.ctr_studied_crypto]]] + [self.has_taxes]
+
+        return self.next_state, reward, done, info
 
 
 class DQN_Algo(object):

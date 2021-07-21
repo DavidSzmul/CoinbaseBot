@@ -13,26 +13,36 @@ class Resolution_Historic(Enum):
     hour = 'hour'
     day = 'day'
 
-def load_studied_crypto():
+def load_studied_crypto(path: str=None):
     ''' Load of studied cryptos'''
-    with open(CRYPTO_STUDY_FILE) as f:
+    if path is None:
+        path = CRYPTO_STUDY_FILE
+    with open(path) as f:
         studied_crypto = json.load(f)
     return studied_crypto
 
-def load(resolution: Resolution_Historic) -> pd.DataFrame:
+def load(resolution: Resolution_Historic, path: str=None) -> pd.DataFrame:
     '''Load Historic of crypto values'''
-    
-    # Path of storage
-    store = pd.HDFStore(STORE)
+    # Path of storage (create new file if empty)
+    if path is None:
+        path = STORE
+    store = pd.HDFStore(path)
+    # Check if store is empty
+    if resolution.value not in store:
+        return pd.DataFrame(index=[0])
     df = store[resolution.value]
-
+    store.close()
+    
     # Remove cryptos currently not studied
     cryptos_name = [d['coinbase_name'] for d in load_studied_crypto()]
     crypto_to_remove = [c for c in df.columns if c not in cryptos_name]
     df = df.drop(columns=crypto_to_remove)
     return df
 
-def save(resolution: Resolution_Historic, df: pd.DataFrame):
+def save(resolution: Resolution_Historic, df: pd.DataFrame, path: str=None):
     # Path of storage
-    store = pd.HDFStore(STORE)
+    if path is None:
+        path = STORE
+    store = pd.HDFStore(path)
     store[resolution.value] = df
+    store.close()

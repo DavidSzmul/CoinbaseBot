@@ -1,3 +1,5 @@
+from typing import List
+import numpy as np
 import tensorflow as tf
 import keras
 from keras.models import Sequential
@@ -30,7 +32,6 @@ if __name__ == '__main__':
 
     Generator = NetworkGenerator()
     test_GPU()
-    model = Sequential()
-    # model = Generator.create_SimpleModel()
+    model = Generator.create_DQN_Model()
 
 

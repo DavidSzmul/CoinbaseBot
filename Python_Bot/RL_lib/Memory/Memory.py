@@ -1,4 +1,5 @@
 import random
+from typing import List
 from collections import deque
 import numpy as np
 from dataclasses import dataclass
@@ -17,7 +18,7 @@ class Experience:
 @dataclass
 class DataMemoryUpdate:
     """Class to define input to update memory"""
-    indexes: list
+    indexes: List[int]
     errors: List[float]
 
 class Memory(ABC):

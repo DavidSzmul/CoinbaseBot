@@ -1,17 +1,12 @@
-import os 
 import config
-import json
-
-CRYPTO_STUDY_FILE = os.path.join(config.DATA_DIR, 'dtb/CRYPTO_STUDIED.json')
 
 class Portfolio(dict):
 
     def __init__(self,*arg,**kw):
         super().__init__(*arg,**kw)
         # Read Crypto
-        with open(CRYPTO_STUDY_FILE) as f:
-            data = json.load(f)
-        crypto_study = [d['coinbase_name'] for d in data]
+        crypto_study = [d['coinbase_name'] for d in config.load_studied_crypto()]
+
         for c in crypto_study:
             self[c] = {'ammount': 0, 'value': 0, 'last-price': 0}
         self.stableCoin = 'USDC-USD'

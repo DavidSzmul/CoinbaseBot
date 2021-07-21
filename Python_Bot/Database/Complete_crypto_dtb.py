@@ -10,17 +10,16 @@ from datetime import date, datetime, timedelta
 import urllib
 import requests
 
-import config
+from Database import Historic_dtb
 
-CRYPTO_STUDY_FILE = os.path.join(config.DATA_DIR, 'dtb/CRYPTO_STUDIED.json')
-STORE = os.path.join(config.DATA_DIR, 'dtb/store.h5')
 
 class Dtb_crypto_historic():
     # Database that autocomplete containing all historic of requested crypto with 1min resolution
     def __init__(self, maxSizeDtb=1e4, 
                  resolution = 'min'):
-                 
-        self.possible_resolutions = {'min': 60, 'hour': 3600, 'day': 86400}
+
+        res_historic = Historic_dtb.Resolution_Historic       
+        self.possible_resolutions = {res_historic.min: 60, res_historic.hour: 3600, res_historic.day: 86400}
         assert resolution in self.possible_resolutions, "Resolution must be: 'min', 'hour' or 'day'"
 
         self.maxSizeDtb = maxSizeDtb

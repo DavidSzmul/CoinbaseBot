@@ -1,9 +1,12 @@
 import numpy as np
 from dataclasses import dataclass
+from typing import List, Callable
+import random
 import keras
 
 from RL_lib.Memory.Memory import Experience, DataMemoryUpdate, SimpleMemory, PER
-from RL_Lib.Network.NeuralNetwork import NetworkGenerator
+from RL_lib.Network.NeuralNetwork import NetworkGenerator
+from RL_lib.Agent.agent import Agent
 
 @dataclass
 class DQN_parameters:
@@ -21,29 +24,29 @@ class DQN_parameters:
 
     epsilon_err = 1e-5              # Epsilon to clip reward stricly inferior to [-1,1]
 
-class DQN_Agent:
+class DQN_Agent(Agent):
     """Agent using Deep Q Learning"""
 
-    update_model
-    update_target
+    update_model :Callable
+    update_target :Callable
 
-    def __init__(self, state_shape: np.ndarray, action_size: np.ndarray,
-    automatic_model: bool= True, layers_model: List[int]= [32, 32],      # In case of auto-generated model
-    loading_model: bool= False, name_model: str ='', model=None,        # In case of loaded model (or model directly)
-    params: DQN_parameters = DQN_parameters()):
+    def __init__(self, state_shape: np.ndarray, action_shape: np.ndarray,
+            automatic_model: bool= True, layers_model: List[int]= [32, 32],      # In case of auto-generated model
+            loading_model: bool= False, name_model: str ='', model=None,        # In case of loaded model (or model directly)
+            params: DQN_parameters = DQN_parameters()):
 
         # Global Parameters
-        self.state_size = state_size
-        self.action_size = action_size
+        self.state_shape = state_shape
+        self.action_shape = action_shape
 
         # DQN Parameters
         self.params = params
 
         # Memory
         if self.params.use_PER:
-            self.memory = PER(memory_size)
+            self.memory = PER(params.memory_size)
         else:
-            self.memory = SimpleMemory(memory_size)
+            self.memory = SimpleMemory(params.memory_size)
 
         # Update Function (depending if DQN or DDQN)
         if self.params.use_double_dqn:
@@ -63,7 +66,7 @@ class DQN_Agent:
 
         # Model for DQN
         if loading_model: # Load Existing Model
-            self.model = load_model(name_model) 
+            self.model = keras.models.load_model(name_model) 
             print('DQN Model LOADED')
         elif automatic_model: # Generate Automatic Model
             self.model = self._build_model(layers_model)
@@ -82,7 +85,7 @@ class DQN_Agent:
         return NetworkGenerator().create_DQN_Model(self.state_shape, self.action_shape, 
                                 layers=layers_model, learning_rate=self.params.learning_rate)
 
-    def _clip_reward(reward: float) -> float:
+    def _clip_reward(self, reward: float) -> float:
         #Clip of reward
         return np.clip(reward, -1+self.params.epsilon_err, 1-self.params.epsilon_err)
 
@@ -224,30 +227,23 @@ class DQN_Agent:
         else:
             # Get random action
             # ONLY FOR discrete events (as DQN)
-            return random.choice(list(range(self.action_size)))
+            return random.choice(list(range(self.action_shape)))
 
     def save_weights(self, filepath, overwrite=False):
-        save_model(self.model, filepath, overwrite=overwrite)
+        keras.models.save_model(self.model, filepath, overwrite=overwrite)
 
 
 if __name__ == '__main__':
     import os, sys, time
     import matplotlib.pyplot as plt
-
-    # ### Use of GPU ?
-    # os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-    # flag_use_GPU = True
-    # os.environ["CUDA_VISIBLE_DEVICES"]=["-1", "0"][flag_use_GPU]
-
-    # Environment settings
-    MODEL_NAME = 'CartePole'    
+    from RL_lib.Environment.Environment import Default_Env
 
     # Display Results
     verbose = 1
 
     ### INITIALIZATION
-    env = Environment("gym", 'CartPole-v0')
-    env = env.getEnv()
+    #TODO
+    env = Default_Env()
     
     USE_SOFT_UPDATE=False
     USE_DOUBLE_DQN=True
@@ -256,12 +252,6 @@ if __name__ == '__main__':
     flag_load_model = True
     path_best_Model = 'models/Best_Models/best_model.model'
     if flag_load_model:
-        agent = DQN_Agent(env, loading_model=True, use_soft_update=USE_SOFT_UPDATE, use_double_dqn=USE_DOUBLE_DQN, use_PER=USE_PER, name_model=path_best_Model)
+        agent = DQN_Agent(env.state_shape, env.action_shape, loading_model=True, use_soft_update=USE_SOFT_UPDATE, use_double_dqn=USE_DOUBLE_DQN, use_PER=USE_PER, name_model=path_best_Model)
     else:
-        agent = DQN_Agent(env, layers_model=[24,24],use_soft_update=USE_SOFT_UPDATE, use_double_dqn=USE_DOUBLE_DQN, use_PER=USE_PER)
-    
-    ### TRAINING/EXPLORATION
-    STEPS_MAX = 1e4
-    DELTA_SAVE = 0 
-    agent.train(nb_steps=STEPS_MAX,delta_save=DELTA_SAVE, verbose=verbose, name_model = path_best_Model)
-    
+        agent = DQN_Agent(env.state_shape, env.action_shape, layers_model=[24,24],use_soft_update=USE_SOFT_UPDATE, use_double_dqn=USE_DOUBLE_DQN, use_PER=USE_PER)

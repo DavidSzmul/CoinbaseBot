@@ -6,6 +6,7 @@ import keras
 
 from RL_lib.Memory.Memory import Experience, DataMemoryUpdate, SimpleMemory, PER
 from RL_lib.Network.NeuralNetwork import NetworkGenerator
+from RL_lib.Agent.agent import Agent
 
 @dataclass
 class DQN_parameters:
@@ -23,16 +24,16 @@ class DQN_parameters:
 
     epsilon_err = 1e-5              # Epsilon to clip reward stricly inferior to [-1,1]
 
-class DQN_Agent:
+class DQN_Agent(Agent):
     """Agent using Deep Q Learning"""
 
     update_model :Callable
     update_target :Callable
 
     def __init__(self, state_shape: np.ndarray, action_shape: np.ndarray,
-    automatic_model: bool= True, layers_model: List[int]= [32, 32],      # In case of auto-generated model
-    loading_model: bool= False, name_model: str ='', model=None,        # In case of loaded model (or model directly)
-    params: DQN_parameters = DQN_parameters()):
+            automatic_model: bool= True, layers_model: List[int]= [32, 32],      # In case of auto-generated model
+            loading_model: bool= False, name_model: str ='', model=None,        # In case of loaded model (or model directly)
+            params: DQN_parameters = DQN_parameters()):
 
         # Global Parameters
         self.state_shape = state_shape
@@ -235,22 +236,14 @@ class DQN_Agent:
 if __name__ == '__main__':
     import os, sys, time
     import matplotlib.pyplot as plt
-
-    # ### Use of GPU ?
-    # os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-    # flag_use_GPU = True
-    # os.environ["CUDA_VISIBLE_DEVICES"]=["-1", "0"][flag_use_GPU]
-
-    # Environment settings
-    MODEL_NAME = 'CartePole'    
+    from RL_lib.Environment.Environment import Default_Env
 
     # Display Results
     verbose = 1
 
     ### INITIALIZATION
     #TODO
-    env = Environment("gym", 'CartPole-v0')
-    env = env.getEnv()
+    env = Default_Env()
     
     USE_SOFT_UPDATE=False
     USE_DOUBLE_DQN=True
@@ -259,12 +252,6 @@ if __name__ == '__main__':
     flag_load_model = True
     path_best_Model = 'models/Best_Models/best_model.model'
     if flag_load_model:
-        agent = DQN_Agent(env, loading_model=True, use_soft_update=USE_SOFT_UPDATE, use_double_dqn=USE_DOUBLE_DQN, use_PER=USE_PER, name_model=path_best_Model)
+        agent = DQN_Agent(env.state_shape, env.action_shape, loading_model=True, use_soft_update=USE_SOFT_UPDATE, use_double_dqn=USE_DOUBLE_DQN, use_PER=USE_PER, name_model=path_best_Model)
     else:
-        agent = DQN_Agent(env, layers_model=[24,24],use_soft_update=USE_SOFT_UPDATE, use_double_dqn=USE_DOUBLE_DQN, use_PER=USE_PER)
-    
-    ### TRAINING/EXPLORATION
-    STEPS_MAX = 1e4
-    DELTA_SAVE = 0 
-    agent.train(nb_steps=STEPS_MAX,delta_save=DELTA_SAVE, verbose=verbose, name_model = path_best_Model)
-    
+        agent = DQN_Agent(env.state_shape, env.action_shape, layers_model=[24,24],use_soft_update=USE_SOFT_UPDATE, use_double_dqn=USE_DOUBLE_DQN, use_PER=USE_PER)

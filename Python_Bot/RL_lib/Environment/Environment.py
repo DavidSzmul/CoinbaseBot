@@ -13,7 +13,7 @@ class Environment(ABC):
     done: bool
 
     @abstractmethod
-    def step(self, action: np.ndarray) -> np.ndarray:
+    def step(self, action: np.ndarray) -> tuple:
         '''Update environment based on chosen action'''
 
     @abstractmethod
@@ -25,3 +25,36 @@ class Environment(ABC):
 
     def get_action_shape(self):
         return self.action_shape
+
+    def get_state(self):
+        return self.state
+
+class Default_Env(Environment):
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.state_shape = np.array((4,))
+        self.action_shape = np.array((2,))
+
+    def step(self, action: np.ndarray):
+        '''Basic Environment'''
+        if np.shape(action) != self.action_shape:
+            raise ValueError("Size of action is not corrsponding with environment")
+
+        self.next_state = np.ones(self.state_shape)
+        reward = max(np.sum(action), 10)
+        done = False
+        info = None
+        return list((self.next_state, reward, done, info))
+
+    def reset(self):
+        '''Reset environment'''
+        self.state = np.zeros(self.state_shape)
+        return self.state
+
+if __name__=="__main__":
+    env = Default_Env()
+    state = env.reset()
+    action = np.ones(env.action_shape)
+    next_state, reward, done, info = env.step(action)
+    print(f"state: {state}, next_state: {next_state}, reward: {reward}, done: {done}, info: {info}")

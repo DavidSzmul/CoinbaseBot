@@ -13,7 +13,7 @@ class Experience:
     next_state: np.ndarray
     reward: float
     done: bool
-    error: float # Only used for Double QN
+    error: float=0          # Only used for PER
 
 @dataclass
 class DataMemoryUpdate:

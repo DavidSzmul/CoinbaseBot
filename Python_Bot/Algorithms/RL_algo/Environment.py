@@ -8,14 +8,8 @@ class Crypto_Choice_Environment(Environment):
         self.state_shape = state_shape
         self.action_shape = np.array((2,))
         
-    def step(self, action: np.ndarray) -> np.ndarray:
+    def step(self, action: np.ndarray) -> tuple:
         '''Update environment based on chosen action'''
 
     def reset(self) -> np.ndarray:
         '''Reset environment'''
-
-    def get_state_shape(self):
-        return self.state_shape
-
-    def get_action_shape(self):
-        return self.action_shape

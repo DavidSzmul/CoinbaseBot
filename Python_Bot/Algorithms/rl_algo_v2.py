@@ -1,6 +1,5 @@
 ### Algorithm of choice of crypto using DQN Reinforcement Learning Algo
 ### Model can be continuously improved by generating augmented database
-from Algorithms.rl_algo import Environment_Crypto
 from dataclasses import dataclass
 from enum import Enum
 from collections import deque
@@ -19,9 +18,10 @@ import itertools
 import config
 
 # from Algorithms.portfolio import Portfolio
-from RL_lib.Environment.Environment import Environment
+from Algorithms.RL_algo.Environment_Trade import Exchanged_Var_Environment_Trading, Environment_Compare_Trading
 from RL_lib.Agent.agent import Agent
 from RL_lib.Agent.executor import Executor
+from Displayer.Displayer import Displayer
 
 
 
@@ -53,19 +53,25 @@ class Historic_Executor(Executor):
         self.loss_queue = deque(maxlen=self.nb_trade) # Used for training
 
         
-    def start(self, agent: Agent, env: Environment_Compare_Trading):
+    def start(self, agent: Agent, env: Environment_Compare_Trading, displayer: Displayer=None):
         switcher = {
             Mode_Algo.train: self.start_train,
             Mode_Algo.test: self.start_test,
             Mode_Algo.real_time: self.start_real_time,
         }
         self.loop = switcher[self.mode]
-        self.loop(env) # Run appropriate mode
+        self.loop(agent, env, displayer) # Run appropriate mode
 
     def update_environment(self, 
-        env: Exchanged_Var_Environment_Trading, 
-        historic, current_trade: int, idx_time: int):
-        '''Update Environment based on specific historic'''
+            env: Exchanged_Var_Environment_Trading, 
+            excanged_var: Exchanged_Var_Environment_Trading):
+        '''Update Environment based on specific historic (train/test/real-time)'''
+
+        env.set_exchanged_var(excanged_var)
+
+    def get_exchanged_var_env_TrainTest(self,historic,
+            idx_time: int, current_trade: int):
+        '''Generate Exchanged variable for environment for Train/Test'''
 
         excanged_var = Exchanged_Var_Environment_Trading(
             historic_2_trades = historic[idx_time]['state'],
@@ -73,40 +79,55 @@ class Historic_Executor(Executor):
             evolution_2_trades = historic[idx_time]['evolution'],
             current_trade = current_trade,
             )
-        env.set_exchanged_var(excanged_var)
+        return excanged_var
 
-    def update_environment_realtime(self, 
-        env: Exchanged_Var_Environment_Trading,
-        current_trade: int,
-        ):
-        '''TODO'''
-        pass
-
-    def start_train(self, agent: Agent, env: Environment_Compare_Trading):
-        
+    def start_train(self, agent: Agent, env: Environment_Compare_Trading, displayer: Displayer):
+        '''Loop for training Agent'''
         for i_time in range(self.nb_time): # For each Time
-            ### Select random current_trade
+            # Select random current_trade
             self.current_trade = random.choice(list(range(self.nb_trade)))
-            ### Update Environment to set new states
-            self.update_environment(env, self.historic, self.current_trade, i_time)
-            for j in range(self.nb_trade):
-                ### Train Agent
-                self.train_cycle(agent, env)
+            # Update Exchanged Variables for environment
+            exchanged_var = self.get_exchanged_var_env_TrainTest(self.historic, self.current_trade, i_time)
+            # Update Environment to set new states
+            self.update_environment(env, exchanged_var)
 
-    def start_test(self, agent: Agent, env: Environment_Compare_Trading):
+            for _ in range(self.nb_trade): # For each crypto
+                # Train Agent
+                self.train_cycle(agent, env)
+            
+            # Add displayer to check performances
+            if displayer is not None:
+                displayer.update(exchanged_var)
+
+    def start_test(self, agent: Agent, env: Environment_Compare_Trading, displayer: Displayer):
+        '''Loop for testing Agent'''
+
         if self.current_trade is None:
             raise ValueError('"current_trade" can''t be None during test phase')
 
         for i_time in range(self.nb_time): # For each Time
-            ### Update Environment to set new states
-            self.update_environment(env, self.historic, self.current_trade, i_time)
-            for j in range(self.nb_trade):
-                ### Execute Agent
+            # Update Exchanged Variables for environment
+            exchanged_var = self.get_exchanged_var_env_TrainTest(self.historic, self.current_trade, i_time)
+            # Update Environment to set new states
+            self.update_environment(env, exchanged_var)
+            
+            for _ in range(self.nb_trade): # For each crypto
+                # Execute Agent
                 self.execute_cycle(agent, env)
-            ### Determine new current trade
-            self.current_trade = env.get_current_trade
+            # Determine new current trade
+            self.current_trade = env.get_current_trade()
 
-    def start_real_time(self, agent: Agent, env: Environment_Compare_Trading):
+            # TODO: Analyze profits made during test
+
+            # Add displayer to check performances
+            if displayer is not None:
+                displayer.update(exchanged_var)
+
+
+
+    def start_real_time(self, agent: Agent, env: Environment_Compare_Trading, displayer: Displayer):
+        '''Loop for executing in real-Time the association Agent+Env'''
+        
         if self.current_trade is None:
             raise ValueError('"current_trade" can''t be None during real-time phase')
 
@@ -122,21 +143,14 @@ class Historic_Executor(Executor):
                 ### Test Agent
                 self.execute_cycle(agent, env)
             ### Determine new current trade
-            self.current_trade = env.get_current_trade
+            self.current_trade = env.get_current_trade()
 
-            ### Check if user finished the process
-            # TODO
-            finished = False
-
-        def execute_cycle(self, agent: Agent, env: Environment_Compare_Trading):
-            '''Polymorphism: Adaptation of execute in order to know the actions done by the 
-            Agent based on the Environment'''
-            state = env.get_state()
-            action = agent.get_action(state)
-            _, _, done, _ = env.step(action)
-            return done
+            # Add displayer to check performances
+            if displayer is not None:
+                finished = displayer.update(exchanged_var)
 
 
+# TODO
 # Environment interacting with Coinbase interface to train/test based on historic of cryptos
 # The environment is made to sequentially compare cryptos one by one (including taxes when necessary)
 # The specificity of this environment is that it is automatically done after all cryptos has been studied

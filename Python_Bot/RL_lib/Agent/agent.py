@@ -5,6 +5,8 @@ from RL_lib.Memory.Memory import Experience
 
 class Agent(ABC):
 
+    epsilon: float # Ratio between exploration vs exploitation
+    
     @abstractmethod
     def get_action(state: np.ndarray) -> np.ndarray:
         '''Determine best action based on state'''

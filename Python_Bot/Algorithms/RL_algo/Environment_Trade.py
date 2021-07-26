@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from RL_lib.Environment.Environment import Environment
 import numpy as np
+import random
 
 @dataclass
 class Exchanged_Var_Environment_Trading:
@@ -67,6 +68,7 @@ class Environment_Compare_Trading(Environment):
 
     def reset(self):
         '''Reset environment'''
+        #TODO
         order_comparison = random.shuffle([c for c in range(self.nb_trade) if c != self.current_trade])
 
         self.state = np.zeros(self.state_shape)

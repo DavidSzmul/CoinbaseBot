@@ -242,7 +242,6 @@ if __name__ == '__main__':
     verbose = 1
 
     ### INITIALIZATION
-    #TODO
     env = Default_Env()
     
     USE_SOFT_UPDATE=False

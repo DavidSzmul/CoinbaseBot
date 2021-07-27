@@ -1,28 +1,18 @@
 ### Algorithm of choice of crypto using DQN Reinforcement Learning Algo
 ### Model can be continuously improved by generating augmented database
-from dataclasses import dataclass
 from enum import Enum
 from collections import deque
 from typing import Callable
-import pandas as pd
 import numpy as np
-import json
-from matplotlib import pyplot as plt
-from sklearn.preprocessing import Normalizer
-from scipy import signal
-import asyncio
-import time
 import random
-import itertools
 
 import config
 
 # from Algorithms.portfolio import Portfolio
-from Algorithms.RL_algo.Environment_Trade import Exchanged_Var_Environment_Trading, Environment_Compare_Trading
-from RL_lib.Agent.agent import Agent
-from RL_lib.Agent.executor import Executor
-from Displayer.Displayer import Displayer
-
+from RL_lib.agent.agent import Agent
+from RL_lib.agent.executor import Executor
+from displayer.displayer import Displayer
+from Algorithms.lib.algo_one_trade import Exchanged_Var_Environment_Trading, Environment_Compare_Trading
 
 
 class Mode_Algo(Enum):
@@ -66,8 +56,7 @@ class Historic_Executor(Executor):
             env: Exchanged_Var_Environment_Trading, 
             excanged_var: Exchanged_Var_Environment_Trading):
         '''Update Environment based on specific historic (train/test/real-time)'''
-
-        env.set_exchanged_var(excanged_var)
+        env.set_newTime_on_Env(excanged_var)
 
     def get_exchanged_var_env_TrainTest(self,historic,
             idx_time: int, current_trade: int):
@@ -91,7 +80,9 @@ class Historic_Executor(Executor):
             # Update Environment to set new states
             self.update_environment(env, exchanged_var)
 
-            for _ in range(self.nb_trade): # For each crypto
+            for _ in range(self.nb_trade-1): # For each crypto
+                # Reset Environment (compare with another trade)
+                env.reset()
                 # Train Agent
                 self.train_cycle(agent, env)
             
@@ -111,7 +102,9 @@ class Historic_Executor(Executor):
             # Update Environment to set new states
             self.update_environment(env, exchanged_var)
             
-            for _ in range(self.nb_trade): # For each crypto
+            for _ in range(self.nb_trade-1): # For each crypto
+                # Reset Environment (compare with another trade)
+                env.reset()
                 # Execute Agent
                 self.execute_cycle(agent, env)
             # Determine new current trade
@@ -139,7 +132,9 @@ class Historic_Executor(Executor):
             ### Update Environment to set new states
             self.update_environment_realtime(env, self.current_trade)
 
-            for j in range(self.nb_trade):
+            for j in range(self.nb_trade-1):
+                # Reset Environment (compare with another trade)
+                env.reset()
                 ### Test Agent
                 self.execute_cycle(agent, env)
             ### Determine new current trade
@@ -147,6 +142,7 @@ class Historic_Executor(Executor):
 
             # Add displayer to check performances
             if displayer is not None:
+                exchanged_var=None
                 finished = displayer.update(exchanged_var)
 
 
@@ -170,16 +166,6 @@ class Environment_Crypto(object):
         self.curent_experiences = None
         self.normalizer = None
         self._mode = None
-
-        ## State of Environment
-        self.current_crypto = 0     # Index of chosen crypto
-        self.has_taxes = True       # State that taxes are to include during comparison of 2 cryptos
-        self.order_comparison = []  # Order to compare crypto by crypto
-        self.nb_cryptos = 0
-        self.state = None
-        self.next_state = None
-        self.reward = None
-        self.done = False
 
         ## Reinitialization Mode
         self.reset_mode(mode)
@@ -208,128 +194,10 @@ class Environment_Crypto(object):
         self._ctr = 0
         self.last_experience = {'state': None, 'next_state':None, 'evolution': None}
 
-    #TODO
-    def _fit_normalizer(self, df_historic):
-        
-        # Need to normalize data in order to effectively train.
-        # But this transform has to be done before running in real time
-        self.normalizer = Normalizer()
-        self.normalizer.fit(df_historic)
-        # TODO
-        # Or maybe use diff_prc, already normalized
-
-    #TODO
-    def _normalize(self, states):
-        # TODO
-        # Normalization of state (used for train/test/real-time state)
-        return self.normalizer.transform(states.to_numpy())
-
-    def generate_train_test_environment(self, flag_regenerate=True,
-                                        ratio_unsynchrnous_time = 0.66, # 2/3 of of training is unsychronous to augment database
-                                        ratio_train_test = 0.8, verbose=1): 
-
-        ### LOAD HISTORIC + STUDIED CRYPTO
-        if verbose:
-            print('Loading of Historic of cryptos...')
-        df_historic = config.load_df_historic('min')
-        self.cryptos_name = list(df_historic.columns)  
-        self.nb_cryptos = len(self.cryptos_name)
-
-        ### PREPARE NORMALIZATION
-        if verbose:
-            print('Normalization of database...')
-        self._fit_normalizer(df_historic)
-        if not flag_regenerate: # No need to create new train/test env
-            return
-
-        ### CUT TRAIN/TEST DTB
-        if verbose:
-            print('Generation of train/test database...')
-        df_arr_normalized = self._normalize(df_historic)
-        size_dtb = len(df_historic.index)
-        idx_cut_train_test = int(ratio_train_test*size_dtb)
-        train_arr = df_arr_normalized[:idx_cut_train_test]
-        test_arr = df_arr_normalized[idx_cut_train_test:]
-
-        ### DETERMINE FUTURE EVOLUTION OF CRYPTOS (only for train)
-        def get_evolution(historic_array):
-            # For each crypto (column), determine the best/worst evolution
-            # in the future
-            # TODO
-            evolution_array = np.zeros(np.shape(historic_array))
-            return evolution_array
-
-        ### DEFINITION OF EXPERIENCES
-        def get_synchronous_experiences(array, evolution=None): # For train + test
-            
-            experiences = []
-            evolution_predict = None
-            for idx_start_time in range(np.shape(array)[0]-self.duration_historic-self.duration_future):
-                
-                idx_present = idx_start_time+self.duration_historic
-                state = array[idx_start_time:idx_present, :]    # State
-                next_state = array[idx_present, :]              # Next iteration of state
-
-                if evolution is not None: # In train mode
-                    evolution_predict = evolution[idx_present-1,:]
-                experiences.append({'state': state, 'next_state':next_state, 'evolution': evolution_predict})
-
-            return experiences
-                
-        def get_unsynchronous_experiences(array, nb_experience, evolution=None): # Only for train
-            
-            if nb_experience == 0:
-                return None
-            if evolution is None:
-                raise ValueError('evolution shall not be null for unsynchronous experiences')
-
-            experiences = []
-            evolution_predict = None
-            Range_t = list(range(0, np.shape(array)[0]-self.duration_historic-self.duration_future))
-            nb_crypto = np.shape(array)[1]
-
-            for i in range(nb_experience):
-                ### Choose random timing for each crypto
-                idx_time = random.sample(Range_t, nb_crypto)
-                state = np.zeros((self.duration_historic, nb_crypto))
-                next_state = np.zeros((nb_crypto, ))
-                evolution_predict = np.zeros((nb_crypto, ))
-
-                for j in range(nb_crypto):
-                    idx_present_crypto = idx_time[j] + self.duration_historic
-                    state[:,j] = array[idx_time[j]:idx_present_crypto, j]                               # State
-                    next_state[j] = array[idx_time[j] + self.duration_historic, j]                      # Next iteration of state
-                    evolution_predict[j] = evolution[idx_time[j] + self.duration_historic-1,j]   # Evolution related to reward
-
-                experiences.append({'state': state, 'next_state':next_state, 'evolution': evolution_predict})
-
-            return experiences
-
-        ### GENERATION OF TRAIN
-        #### Synchronous
-        evolution_train = get_evolution(train_arr) # Only train, not necessary for test
-        exp_sync_train = get_synchronous_experiences(train_arr, evolution=evolution_train)
-
-        #### Unsynchronous
-        len_synchronized_train = len(exp_sync_train)
-        nb_train_asynchronous = int(len_synchronized_train/ratio_unsynchrnous_time)
-        exp_unsync_train = get_unsynchronous_experiences(train_arr, nb_train_asynchronous, evolution=evolution_train)
-
-        experiences_train =  random.shuffle(exp_sync_train + exp_unsync_train)
-
-        ### GENERATION OF TEST
-        experiences_test = get_synchronous_experiences(test_arr, evolution=None)
-
-        self.train_experience = experiences_train
-        self.test_experience = experiences_test
-        if verbose:
-            print('Train/test database generated')
-
-
 if __name__ == '__main__':
-
-    env = Environment_Crypto()
-    env.generate_train_test_environment()
+    pass
+    # env = Environment_Crypto()
+    # env.generate_train_test_environment()
 
     # Ptf = Portfolio()
     # Ptf['USDC-USD']['last-price'] = 1

@@ -2,8 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from collections import deque
 
-from Displayer.Displayer import Displayer
-from RL_lib.Agent.executor import Train_perfs
+from displayer.displayer import Displayer
+from RL_lib.agent.executor import Train_perfs
 
 class Displayer_Train_MATPLOTLIB(Displayer):
 

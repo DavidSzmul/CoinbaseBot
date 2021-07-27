@@ -8,7 +8,6 @@ class Environment(ABC):
     action_shape :np.ndarray
 
     state: np.ndarray
-    next_state: np.ndarray
     reward: float
     done: bool
 
@@ -19,6 +18,14 @@ class Environment(ABC):
     @abstractmethod
     def reset(self) -> np.ndarray:
         '''Reset environment'''
+
+    def verify_action_shape(self, action: np.ndarray):
+        if np.shape(action) != self.action_shape:
+            raise ValueError("Size of action is not corrsponding with environment")
+
+    def verify_state_shape(self, state: np.ndarray):
+        if np.shape(state) != self.state_shape:
+            raise ValueError("Size of state is not corrsponding with environment")
 
     def get_state_shape(self):
         return self.state_shape
@@ -41,11 +48,11 @@ class Default_Env(Environment):
         if np.shape(action) != self.action_shape:
             raise ValueError("Size of action is not corrsponding with environment")
 
-        self.next_state = np.ones(self.state_shape)
+        self.state = np.ones(self.state_shape)
         reward = max(np.sum(action), 10)
         done = False
         info = None
-        return list((self.next_state, reward, done, info))
+        return list((self.state, reward, done, info))
 
     def reset(self):
         '''Reset environment'''

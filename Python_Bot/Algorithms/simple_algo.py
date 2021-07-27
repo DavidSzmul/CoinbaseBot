@@ -57,11 +57,10 @@ class Simple_Algo(object):
         pass
 
     def loop_RealTime(self, portfolio, delta_t=60, verbose=0):
-
-        # TODO Enabling the possibility to implement on local server the visualization
-        # Create LocalSever
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.step_RealTime(portfolio, delta_t=delta_t))
+        pass
+        # # Create LocalSever
+        # loop = asyncio.get_event_loop()
+        # loop.run_until_complete(self.step_RealTime(portfolio, delta_t=delta_t))
     
     async def step_RealTime(self, portfolio, delta_t=60):
         

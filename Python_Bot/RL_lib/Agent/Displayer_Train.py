@@ -2,26 +2,42 @@ import numpy as np
 import matplotlib.pyplot as plt
 from collections import deque
 
-class Displayer(object):
+from displayer.displayer import Displayer
+from RL_lib.agent.executor import Train_perfs
+
+class Displayer_Train_MATPLOTLIB(Displayer):
+
+    ctr_t: int
+    t: deque
+    epsilons: deque
+    rewards: deque
+    losses: deque
+    min_rew: deque
+    avg_rew: deque
+    max_rew: deque
 
     def __init__(self, max_deque = 10000, delta_display=1, nb_mean=10):
         self.nb_sp=3
         self.nb_mean=nb_mean
         self.delta_display = delta_display
+        self.max_deque = max_deque
 
         self.fig, self.ax = plt.subplots(self.nb_sp, 1, sharex=True)
         plt.close(self.fig.number)
         plt.ion()
-        self.reinit_fig()
+        self.reset() 
 
+    def reset(self):
+        '''Reinitialization of internal variables'''
         self.ctr_t = 0
-        self.t  = deque(maxlen=max_deque)
-        self.epsilons = deque(maxlen=max_deque)
-        self.rewards = deque(maxlen=max_deque)
-        self.losses = deque(maxlen=max_deque)
-        self.min_rew = deque(maxlen=max_deque)
-        self.avg_rew = deque(maxlen=max_deque)
-        self.max_rew = deque(maxlen=max_deque)
+        self.t  = deque(maxlen=self.max_deque)
+        self.epsilons = deque(maxlen=self.max_deque)
+        self.rewards = deque(maxlen=self.max_deque)
+        self.losses = deque(maxlen=self.max_deque)
+        self.min_rew = deque(maxlen=self.max_deque)
+        self.avg_rew = deque(maxlen=self.max_deque)
+        self.max_rew = deque(maxlen=self.max_deque)
+        self.reinit_fig()
 
     def reinit_fig(self):
         ### Check if plot still exists
@@ -31,14 +47,12 @@ class Displayer(object):
             for a in self.ax:
                 a.clear()
 
-    def update_stats(self,epsilon, reward, loss):
-        self.epsilons.append(epsilon)
-        self.rewards.append(reward)
+    def update_stats(self, train_perfs: Train_perfs):
+        self.epsilons.append(train_perfs.epsilon)
+        self.rewards.append(train_perfs.total_reward)
+        self.losses.append(train_perfs.total_loss)
         self.ctr_t+=1
         self.t.append(self.ctr_t)
-        
-        self.rewards.append(reward)
-        self.losses.append(loss)
 
         reward_array = np.array(self.rewards)
         self.min_rew.append(min(reward_array[-self.nb_mean:]))
@@ -46,10 +60,10 @@ class Displayer(object):
         self.max_rew.append(max(reward_array[-self.nb_mean:]))
 
 
-    def display_historic(self,epsilon, reward, loss):
+    def update(self,train_perfs: Train_perfs):
         
         self.reinit_fig()
-        self.update_stats(epsilon, reward, loss)
+        self.update_stats(train_perfs)
         if self.ctr_t % self.delta_display:
             return
 
@@ -96,7 +110,9 @@ class Displayer(object):
         self.fig.canvas.flush_events()
 
 if __name__=='__main__':
-    d = Displayer(max_deque=20)
+    d = Displayer_Train_MATPLOTLIB(max_deque=20)
     for i in range(0,100):
-        d.display_historic(i, i, i)
+        if i==20:
+            d.reset()
+        d.update(Train_perfs(i,i,i))
     plt.ioff(), plt.show()

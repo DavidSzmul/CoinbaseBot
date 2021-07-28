@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-from RL_lib.Memory.Memory import Experience
-from RL_lib.Agent.agent import Agent
-from RL_lib.Environment.Environment import Environment
+from rl_lib.memory.memory import Experience
+from rl_lib.agent.agent import Agent
+from rl_lib.environment.environment import Environment
 
 @dataclass
 class Train_perfs():
@@ -50,8 +50,8 @@ class Executor:
 
 
 if __name__=="__main__":
-    from RL_lib.Agent.dqn import DQN_Agent
-    from RL_lib.Environment.Environment import Default_Env
+    from rl_lib.agent.dqn import DQN_Agent
+    from rl_lib.environment.environment import Default_Env
     exec = Executor()
     agent = DQN_Agent()
     env = Default_Env()

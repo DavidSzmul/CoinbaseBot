@@ -1,11 +1,12 @@
-import os
 from cryptography.fernet import Fernet
+from dataclasses import dataclass
 
+@dataclass
 class Coinbase_cryption(object):
-    def __init__(self, path_env='COINBASE_PATH'):
-        self.file_key = os.getenv('COINBASE_PATH')+'KEY.txt'
-        self.file_pswd = os.getenv('COINBASE_PATH')+'PSWD.txt'
-        self.file_API = os.getenv('COINBASE_PATH')+'API.txt'
+
+    file_key: str
+    file_pswd: str
+    file_API: str
 
     def _generate_new_key(self, pswd):
         key = Fernet.generate_key()
@@ -49,7 +50,10 @@ class Coinbase_cryption(object):
         return  self._decrypt(api_key), self._decrypt(api_secret)
 
 if __name__=="__main__":
-    CoinBase_pswd = Coinbase_cryption()
+    import config
+
+    CoinBase_pswd = Coinbase_cryption(config.COINBASE_SCRAPPER_KEY, config.COINBASE_SCRAPPER_PSWD,
+                            config.COINBASE_SCRAPPER_API)
     #####################################################
     # TO DO only one time
     # API_key = b'123456'

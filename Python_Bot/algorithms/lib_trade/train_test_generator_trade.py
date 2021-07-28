@@ -33,7 +33,7 @@ class Train_Test_Generator_Trade():
 
     def _get_synchronous_experiences(self, historic_trades: np.ndarray,
                                 duration_past: int, duration_future: int,
-                                evolution: np.ndarray=None):
+                                evolution: np.ndarray=None) -> List[Experience_Trade]:
         '''Generate synchronous experiences based on duration of past and future used for input/evolution'''
         experiences = []
         evolution_predict = None
@@ -51,7 +51,7 @@ class Train_Test_Generator_Trade():
 
     def _get_unsynchronous_experiences(self, historic_trades: np.ndarray, nb_experience: int,
                                 duration_past: int, duration_future: int,
-                                evolution: np.ndarray=None):
+                                evolution: np.ndarray=None) -> List[Experience_Trade]:
         '''Generate unsynchronous experiences (different trades on different timings to augment database. Only for train)'''
         if nb_experience == 0:
             return None

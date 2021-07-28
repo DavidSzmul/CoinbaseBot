@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 import random
 from typing import List
-from RL_lib.environment.environment import Environment
+from rl_lib.environment.environment import Environment
 
 @dataclass
 class Experience_Trade:
@@ -18,9 +18,9 @@ class Experience_Trade:
 @dataclass
 class Exchanged_Var_Environment_Trading:
     '''Internal variable of environment communicated from Executor'''
-    historic_2_trades: np.ndarray
-    next_values_2_trades: np.ndarray
-    evolution_2_trades: np.ndarray
+    historic: np.ndarray
+    next_value: np.ndarray
+    evolution: np.ndarray
     current_trade: int
 
 class Environment_Compare_Trading(Environment):
@@ -44,7 +44,7 @@ class Environment_Compare_Trading(Environment):
         '''New timing where to compare all available trades to choose the best one'''
         self.exchanged_var = exchanged_var
         
-        self.nb_trade = np.shape(self.exchanged_var.historic_2_trades)[1]
+        self.nb_trade = np.shape(self.exchanged_var.historic)[1]
         self.order_comparison = random.shuffle([c for c in range(self.nb_trade) if c != self.current_trade])
         self.has_taxes = True # While no trade has been exchanged, taxes are to be included
 
@@ -69,7 +69,7 @@ class Environment_Compare_Trading(Environment):
         #                   Historic of crypto possibly better,
         #                   Percentage of taxes to be included]
         trades_2_compare =(self.exchanged_var.current_trade, self.update_trade_to_compare())
-        state_trades = self.exchanged_var.historic_2_trades[:,trades_2_compare]
+        state_trades = self.exchanged_var.historic[:,trades_2_compare]
         self.state = np.array(np.reshape(state_trades), self.has_taxes*self.prc_taxes)
 
         return self.state
@@ -91,7 +91,7 @@ class Environment_Compare_Trading(Environment):
             # The action to switch is relevant only if evolution of change is better than the taxes caused by switching
             return pow(-1,flag_change_trade) * (evolution[_trades_2_compare[0]] - evolution[_trades_2_compare[1]]) - self.has_taxes*self.prc_taxes
         
-        reward = get_reward(action, self.exchanged_var.evolution_2_trades, trades_2_compare)
+        reward = get_reward(action, self.exchanged_var.evolution, trades_2_compare)
         
         # Update internal variables depending on action
         if flag_change_trade:
@@ -101,8 +101,8 @@ class Environment_Compare_Trading(Environment):
         # Generate New State-> [Historic of crypto currently chosen, 
         #                   Historic of crypto possibly better,
         #                   Percentage of taxes to be included]
-        state_prev_trades = self.exchanged_var.historic_2_trades[1:,trades_2_compare]
-        state_new_trades = self.exchanged_var.next_values_2_trades[trades_2_compare]
+        state_prev_trades = self.exchanged_var.historic[1:,trades_2_compare]
+        state_new_trades = self.exchanged_var.next_value[trades_2_compare]
         state_trades = np.concatenate(state_prev_trades, state_new_trades, axis=0)
         self.state = np.array(state_trades.flatten(), [self.has_taxes*self.prc_taxes])
         

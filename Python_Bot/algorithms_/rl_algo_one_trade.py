@@ -9,10 +9,10 @@ import random
 import config
 
 # from Algorithms.portfolio import Portfolio
-from RL_lib.agent.agent import Agent
-from RL_lib.agent.executor import Executor
+from rl_lib.agent.agent import Agent
+from rl_lib.agent.executor import Executor
 from displayer.displayer import Displayer
-from Algorithms.lib.algo_one_trade import Exchanged_Var_Environment_Trading, Environment_Compare_Trading
+from algorithms.lib_trade.algo_one_trade import Exchanged_Var_Environment_Trading, Environment_Compare_Trading
 
 
 class Mode_Algo(Enum):

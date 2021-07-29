@@ -1,3 +1,4 @@
+from pandas.core.frame import DataFrame
 from sklearn.preprocessing import Normalizer
 import numpy as np
 import pandas as pd
@@ -10,18 +11,29 @@ from algo_one_trade import Experience_Trade
 class Train_Test_Generator_Trade():
     '''Class that enables to generate Train/Test database especially for trades'''
     
+    verbose: bool
     normalizer: Normalizer
 
-    #TODO
-    def _fit_normalizer(self, historic_trades, normalizer: Normalizer):
+    def __init__(self, historic_trades: pd.DataFrame, verbose: bool=True):
+        '''Initialization of Generator -> Used for preprocessing'''
+        self.verbose = verbose
+        if self.verbose:
+            print('Fit Normalizer from database...')
+        self.normalizer = Normalizer()
+        self._normalize(historic_trades, self.normalizer)
+
+    #TODO: May be improved
+    def _fit_normalizer(self, historic_trades: pd.DataFrame, normalizer: Normalizer):
         '''Fit Normalizer to inputs
         Preprocessing: Normalize inputs in order to train efficiently Agent'''
         # Need to normalize data in order to effectively train.
         # But this transform has to be done before running in real time
-        normalizer.fit(historic_trades)
-        # Or maybe use diff_prc, already normalized
 
-    def _normalize(self, historic_trades, normalizer: Normalizer):
+        # OR maybe use diff_prc, already normalized
+        normalizer.fit(historic_trades)
+        
+
+    def _normalize(self, historic_trades: DataFrame, normalizer: Normalizer):
         '''Normalization of inputs
         Preprocessing: Normalize inputs in order to train efficiently Agent'''
         return normalizer.transform(historic_trades.to_numpy())
@@ -82,30 +94,18 @@ class Train_Test_Generator_Trade():
 
     def generate_train_test_database(self, historic_trades: pd.DataFrame,
                                         duration_past: int, duration_future: int,
-                                        evolution_method: Callable=None,
-                                        flag_regenerate: bool=True,
+                                        evolution_method: Callable,
                                         ratio_unsynchrnous_time: float=0.66, 
-                                        ratio_train_test: float=0.8, 
-                                        verbose: bool=True): 
+                                        ratio_train_test: float=0.8
+                                        ): 
         '''Function generating train/test database depending of the received trades
         ratio_unsynchrnous_time=0.66 ==> 2/3 of of training is unsychronous 
         to augment database'''
-        # VERIFICATION
-        if flag_regenerate and (evolution_method==None):
-            raise ValueError('Need an evolution_method if generation of train/test')
-
         self.cryptos_name = list(historic_trades.columns)  
         self.nb_cryptos = len(self.cryptos_name)
 
-        # PREPARE NORMALIZATION
-        if verbose:
-            print('Fit normalization of database...')
-        self._fit_normalizer(historic_trades)
-        if not flag_regenerate: # No need to create new train/test env
-            return
-
         # CUT TRAIN/TEST DTB
-        if verbose:
+        if self.verbose:
             print('Generation of train/test database...')
 
         size_dtb = len(historic_trades.index)
@@ -137,6 +137,6 @@ class Train_Test_Generator_Trade():
         experiences_test = self._get_synchronous_experiences(test_arr, 
                                     duration_past, duration_future,
                                     )
-        if verbose:
+        if self.verbose:
             print('Train/test database generated')
         return experiences_train, experiences_test

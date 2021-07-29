@@ -10,3 +10,7 @@ Processing Coinbase:
 - Training/Testing from Database using Supervised Learning -> WIP
 - Training/Testing from Database using Reinforcement Learning -> To brainstorm
 - Real-Time application of trained model -> Final operation
+
+Generate requirements:
+python -m pip freeze > requirements.txt
+pip install requirements.txt 

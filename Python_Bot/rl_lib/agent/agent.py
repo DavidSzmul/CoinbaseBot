@@ -1,7 +1,8 @@
 import numpy as np
 from abc import ABC, abstractmethod
+import keras
 
-from RL_lib.Memory.Memory import Experience
+from rl_lib.memory.memory import Experience
 
 class Agent(ABC):
 
@@ -22,3 +23,6 @@ class Agent(ABC):
     @abstractmethod
     def memorize(experience: Experience) -> float:
         '''Insert new experience into memory'''
+
+    def save_weights(self, filepath, overwrite=False):
+        keras.models.save_model(self.model, filepath, overwrite=overwrite)

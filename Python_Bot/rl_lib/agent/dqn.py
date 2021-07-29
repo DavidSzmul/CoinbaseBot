@@ -4,9 +4,9 @@ from typing import List, Callable
 import random
 import keras
 
-from RL_lib.Memory.Memory import Experience, DataMemoryUpdate, SimpleMemory, PER
-from RL_lib.Network.NeuralNetwork import NetworkGenerator
-from RL_lib.Agent.agent import Agent
+from rl_lib.memory.memory import Experience, DataMemoryUpdate, SimpleMemory, PER
+from rl_lib.network.neural_network import NetworkGenerator
+from rl_lib.agent.agent import Agent
 
 @dataclass
 class DQN_parameters:
@@ -31,8 +31,8 @@ class DQN_Agent(Agent):
     update_target :Callable
 
     def __init__(self, state_shape: np.ndarray, action_shape: np.ndarray,
-            automatic_model: bool= True, layers_model: List[int]= [32, 32],      # In case of auto-generated model
-            loading_model: bool= False, name_model: str ='', model=None,        # In case of loaded model (or model directly)
+            layers_model: List[int]= [32, 32],      # In case of auto-generated model
+            name_model: str=None, model=None,       # In case of loaded model (or model directly)
             params: DQN_parameters = DQN_parameters()):
 
         # Global Parameters
@@ -65,15 +65,15 @@ class DQN_Agent(Agent):
         self.target_update_ctr = 0 # Used for hard target update
 
         # Model for DQN
-        if loading_model: # Load Existing Model
+        if model is not None:
+            self.model = model
+            print('DQN Model IMPORTED')
+        elif name_model is not None:
             self.model = keras.models.load_model(name_model) 
             print('DQN Model LOADED')
-        elif automatic_model: # Generate Automatic Model
+        else:
             self.model = self._build_model(layers_model)
-            print('DQN Model BUILDED')
-        else: # Or directly in input
-            assert model is not None, 'No model set in input'
-            self.model = model
+            print('DQN Model BUILDED')            
 
         # Generate target
         self.target_model=keras.models.clone_model(self.model)
@@ -229,14 +229,11 @@ class DQN_Agent(Agent):
             # ONLY FOR discrete events (as DQN)
             return random.choice(list(range(self.action_shape)))
 
-    def save_weights(self, filepath, overwrite=False):
-        keras.models.save_model(self.model, filepath, overwrite=overwrite)
-
 
 if __name__ == '__main__':
     import os, sys, time
     import matplotlib.pyplot as plt
-    from RL_lib.Environment.Environment import Default_Env
+    from rl_lib.environment.environment import Default_Env
 
     # Display Results
     verbose = 1

@@ -36,7 +36,7 @@ class Historic_Executor(Executor):
     __loop: Callable
 
     def __init__(self):
-        super().__init__(len_loss=1)
+        super().__init__()
 
     def _reset(self, current_trade: int, experiences: List[Experience_Trade], trades_name: List[str]):
         self.current_trade = current_trade
@@ -207,7 +207,7 @@ class Main_RL_Trade_Algo:
         self.duration_past = 180
         self.duration_future = 60
         self.prc_taxes = 0.01
-        state_shape = np.array(self.duration_past,len(self.crypto_names))
+        state_shape = np.array([self.duration_past,len(self.crypto_names)])
         self.env = Environment_Compare_Trading(state_shape,self.prc_taxes)
         action_shape = self.env.get_action_shape()
 

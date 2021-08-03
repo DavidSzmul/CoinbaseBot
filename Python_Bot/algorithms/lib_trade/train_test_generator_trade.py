@@ -5,8 +5,7 @@ import pandas as pd
 import random
 from typing import Callable, List
 
-import config
-from algo_one_trade import Experience_Trade
+from algorithms.lib_trade.algo_one_trade import Experience_Trade
 
 class Train_Test_Generator_Trade():
     '''Class that enables to generate Train/Test database especially for trades'''

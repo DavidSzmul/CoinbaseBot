@@ -20,13 +20,13 @@ class Experience_Trade:
     evolution: np.ndarray
     current_trade: pd.DataFrame
 
-class Generator_Trade():
+class Generator_Trade:
     '''Class that enables to generate Train/Test database especially for trades'''
     
     verbose: bool
     normalizer: Normalizer
 
-    def __init__(self, historic_trades: pd.DataFrame, verbose: bool=True):
+    def __init__(self, historic_trades: pd.DataFrame, verbose: bool=True) -> None:
         '''Initialization of Generator -> Used for preprocessing'''
         self.verbose = verbose
         if self.verbose:
@@ -35,7 +35,7 @@ class Generator_Trade():
         self._fit_normalizer(historic_trades)
 
     #TODO: May be improved
-    def _fit_normalizer(self, historic_trades: pd.DataFrame):
+    def _fit_normalizer(self, historic_trades: pd.DataFrame) -> None:
         '''Fit Normalizer to inputs
         Preprocessing: Normalize inputs in order to train efficiently Agent'''
         # Need to normalize data in order to effectively train.
@@ -44,31 +44,32 @@ class Generator_Trade():
         # OR maybe use diff_prc, already normalized
         self.normalizer.fit(historic_trades)
         
-    def _normalize(self, historic_trades: DataFrame):
+    def _normalize(self, historic_trades: DataFrame) -> np.ndarray:
         '''Normalization of inputs
         Preprocessing: Normalize inputs in order to train efficiently Agent'''
         return self.normalizer.transform(historic_trades.to_numpy())
 
-    def _get_evolution(self, historic_trades: np.ndarray, evolution_method: Callable):
+    def _get_evolution(self, historic_trades: np.ndarray, evolution_method: Callable) -> np.ndarray:
         '''Call of the method to extract evolution of trades.
         Used for reward calculation during RL training'''
         return evolution_method(historic_trades)
 
-    def _get_idx_window_historic(self, nb_iteration_historic: List[int], nb_min_historic: List[int]):
+    def _get_idx_window_historic(self, nb_iteration_historic: List[int], nb_min_historic: List[int]) -> List[int]:
         '''Function generating the window of indexes to obtain an historic state of trades'''
+        if not nb_iteration_historic and not nb_min_historic:
+            return None
         if len(nb_iteration_historic) != len(nb_min_historic):
             raise ValueError('nb_iteration_historic and nb_min_historic parameters must have equivalent length')
-        idx_window = []
-        last = 0
+        
+
+        idx_step = []
         for nb_iter, nb_min in zip(nb_iteration_historic, nb_min_historic):
-            idx_tmp = [-nb_min*i for i in range(nb_iter)]
-            idx_tmp = idx_tmp.reverse()
-            idx_tmp = idx_tmp + last
-            last = idx_tmp[0]
-            idx_window = idx_tmp + idx_window
+            idx_step = idx_step + [-nb_min for _ in range(nb_iter)]
+        idx_window = list(np.cumsum(idx_step) - idx_step[0])
+        idx_window.reverse()
         return idx_window
 
-    def _get_synchronous_experiences(self, historic_trades: pd.Dataframe,
+    def _get_synchronous_experiences(self, historic_trades: pd.DataFrame,
                                 nb_iteration_historic: List[int], nb_min_historic: List[int],
                                 duration_future: int,
                                 evolution: np.ndarray=None) -> List[Experience_Trade]:

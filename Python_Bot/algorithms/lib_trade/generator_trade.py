@@ -1,11 +1,65 @@
-from pandas.core.frame import DataFrame
-from sklearn.preprocessing import Normalizer
+from sklearn.preprocessing import StandardScaler
 import numpy as np
 import pandas as pd
 import random
 from typing import Callable, List
 from dataclasses import dataclass
 
+class Scaler_Trade:
+
+    default_scaler: StandardScaler
+    nb_min_historic: List[int]          # Number of minutes between 2 values
+    nb_iteration_historic: List[int]    # Number of iteration of min diff
+
+    def __init__(self, nb_min_historic: List[int], nb_iteration_historic: List[int]):
+        '''Initialization of Scaler specific to trades based on historical value'''
+
+        self.default_scaler = StandardScaler(with_mean=False) # Supposed to be centered at 0
+        self.nb_min_historic = nb_min_historic
+        self.nb_iteration_historic = nb_iteration_historic
+
+    def _get_diff_pct_trade(self, raw_historic: np.ndarray) -> np.ndarray:
+        '''From historic get percentage difference of a list'''
+        pct = np.diff(raw_historic, axis=0) / raw_historic[:-1, :]
+        pct = np.concatenate((np.zeros((1, np.shape(pct)[1])), pct), axis=0)
+        return pct
+
+    def _set_std_2_scaler(self, list_std: List):
+        self.default_scaler.fit([
+            [0]*len(list_std), 
+            2*np.array(list_std)]
+        )
+
+    def _get_std_list_normalize(self, list_std: List)-> List: 
+
+        list_normalizer_std = []
+        for std, nb_iter in zip(list_std, self.nb_iteration_historic):
+            list_normalizer_std += [std]*nb_iter
+        list_normalizer_std.reverse()
+        return list_normalizer_std
+
+    def fit(self, historic_trades: pd.DataFrame):
+        '''Fit normalization based on historic data'''
+
+        list_std = []
+        arr_trades = historic_trades.to_numpy()
+
+        # Get pct change for all trades depending on number of minutes
+        for nb_min in self.nb_min_historic:
+            buff_trades = arr_trades[::nb_min,:]
+            pct_change = self._get_diff_pct_trade(buff_trades)
+            list_std.append(np.std(pct_change))
+
+        # Get all std of pct change (depending on minute) and send it to scaler
+        list_normalizer_std = self._get_std_list_normalize(list_std)
+        self._set_std_2_scaler(list_normalizer_std)
+
+    def transform(self, state: np.ndarray):
+        '''Transform state with raw values to normalized pct_change values'''
+        pct_change = self._get_diff_pct_trade(state)
+        return self.default_scaler.transform(pct_change)
+
+        
 
 @dataclass
 class Experience_Trade:
@@ -20,34 +74,14 @@ class Experience_Trade:
     evolution: np.ndarray
     current_trade: pd.DataFrame
 
+@dataclass
 class Generator_Trade:
     '''Class that enables to generate Train/Test database especially for trades'''
-    
-    verbose: bool
-    normalizer: Normalizer
 
-    def __init__(self, historic_trades: pd.DataFrame, verbose: bool=True) -> None:
-        '''Initialization of Generator -> Used for preprocessing'''
-        self.verbose = verbose
-        if self.verbose:
-            print('Fit Normalizer from database...')
-        self.normalizer = Normalizer()
-        self._fit_normalizer(historic_trades)
-
-    #TODO: May be improved
-    def _fit_normalizer(self, historic_trades: pd.DataFrame) -> None:
-        '''Fit Normalizer to inputs
-        Preprocessing: Normalize inputs in order to train efficiently Agent'''
-        # Need to normalize data in order to effectively train.
-        # But this transform has to be done before running in real time
-
-        # OR maybe use diff_prc, already normalized
-        self.normalizer.fit(historic_trades)
-        
-    def _normalize(self, historic_trades: DataFrame) -> np.ndarray:
-        '''Normalization of inputs
-        Preprocessing: Normalize inputs in order to train efficiently Agent'''
-        return self.normalizer.transform(historic_trades.to_numpy())
+    nb_min_historic: List[int]
+    nb_iteration_historic: List[int]
+    duration_future: int
+    verbose: bool=False
 
     def _get_evolution(self, historic_trades: np.ndarray, evolution_method: Callable) -> np.ndarray:
         '''Call of the method to extract evolution of trades.
@@ -61,7 +95,6 @@ class Generator_Trade:
         if len(nb_iteration_historic) != len(nb_min_historic):
             raise ValueError('nb_iteration_historic and nb_min_historic parameters must have equivalent length')
         
-
         idx_step = []
         for nb_iter, nb_min in zip(nb_iteration_historic, nb_min_historic):
             idx_step = idx_step + [-nb_min for _ in range(nb_iter)]
@@ -70,37 +103,42 @@ class Generator_Trade:
         return idx_window
 
     def _get_synchronous_experiences(self, historic_trades: pd.DataFrame,
-                                nb_iteration_historic: List[int], nb_min_historic: List[int],
-                                duration_future: int,
+                                scaler: Scaler_Trade,
                                 evolution: np.ndarray=None) -> List[Experience_Trade]:
         '''Generate synchronous experiences based on duration of past and future used for input/evolution'''
 
         # Initialization
         experiences = []
-        idx_window = self._get_idx_window_historic(nb_iteration_historic, nb_min_historic)
+        idx_window = self._get_idx_window_historic(self.nb_iteration_historic, self.nb_min_historic)
         min_index_research = -idx_window[0]+1
+        arr_trades = historic_trades.to_numpy()
 
-        # Normalize
-        historic_normalized = self._normalize(historic_trades)
+        # Loop over present
+        for idx_present in range(min_index_research, np.shape(arr_trades)[0]-self.duration_future):
+            
+            # Extract states based on present
+            idx_current_window = np.array(idx_window) + idx_present
+            state = arr_trades[idx_current_window, :]          
+            next_state = arr_trades[idx_current_window+1, :]   
 
-        # Loop
-        for idx_present in range(min_index_research, np.shape(historic_normalized)[0]-duration_future):
-
-            historic_part = historic_normalized[idx_present+idx_window, :]          # State
-            historic_part_next = historic_normalized[idx_present+idx_window+1, :]   # Next state
-
+            # Normalization of states
+            state = scaler.transform(state)
+            next_state = scaler.transform(state)
+            
+            # Evolution based on present (related to reward)
             evolution_predict = None
             if evolution: # In train mode
                 evolution_predict = evolution[idx_present,:]
-            current_trade = historic_trades.iloc[[idx_present]]
-            experiences.append(Experience_Trade(historic_part, historic_part_next, evolution_predict, current_trade))
+
+            # Share real trade value over present
+            current_trade = arr_trades.iloc[[idx_present]]
+            experiences.append(Experience_Trade(state, next_state, evolution_predict, current_trade))
 
         return experiences
 
     def _get_unsynchronous_experiences(self, historic_trades: np.ndarray, nb_experience: int,
-                                nb_iteration_historic: List[int], nb_min_historic: List[int],
-                                duration_future: int,
-                                evolution: np.ndarray=None) -> List[Experience_Trade]:
+                                        scaler: Scaler_Trade,
+                                        evolution: np.ndarray=None) -> List[Experience_Trade]:
         '''Generate unsynchronous experiences (different trades on different timings to augment database. Only for train)'''
         
         # Initialization
@@ -109,36 +147,44 @@ class Generator_Trade:
         if evolution is None:
             raise ValueError('evolution shall not be null for unsynchronous experiences')
 
+        arr_trades = historic_trades.to_numpy()
+
         experiences = []
-        idx_window = self._get_idx_window_historic(nb_iteration_historic, nb_min_historic)
+        idx_window = self._get_idx_window_historic(self.nb_iteration_historic, self.nb_min_historic)
         min_index_research = -idx_window[0]+1
-        nb_crypto = np.shape(historic_trades)[1]
-
-        # Normalize
-        historic_normalized = self._normalize(historic_trades)
-
+        nb_crypto = np.shape(arr_trades)[1]
+        
         # Loop
-        Range_t = list(range(min_index_research, np.shape(historic_normalized)[0]-duration_future))
+        Range_t = list(range(min_index_research, np.shape(arr_trades)[0]-self.duration_future))
         for _ in range(nb_experience):
-            ### Choose random timing for each crypto
+
+            ### Choose random present for each crypto
             idx_time = random.sample(Range_t, nb_crypto)
-            historic_part = np.zeros((len(idx_window), nb_crypto))
-            historic_part_next = np.zeros((len(idx_window), nb_crypto))
+            state = np.zeros((len(idx_window), nb_crypto))
+            next_state = np.zeros((len(idx_window), nb_crypto))
             evolution_predict = np.zeros((nb_crypto, ))
 
-            for j in range(nb_crypto):
-                historic_part[:,j] = historic_trades[idx_time[j]+idx_window, j]     # State
-                historic_part_next[j] = historic_trades[idx_time[j]+idx_window, j]  # Next state
-                evolution_predict[j] = evolution[idx_time[j], j]                    # Evolution related to reward
+            for j in range(nb_crypto): # Over each crypto
+                # Extract states based on timing
+                idx_current_window = np.array(idx_window) + idx_time[j]
+                state[:,j] = arr_trades[idx_current_window, j]         
+                next_state[:,j] = arr_trades[idx_current_window+1, j]  
+
+                # Evolution based on present (related to reward)
+                evolution_predict[j] = evolution[idx_time[j], j]                    
+            
+            # Normalization of states
+            state = scaler.transform(state)
+            next_state = scaler.transform(state)
+
             current_trade = None # Useless for training
             
-            experiences.append(Experience_Trade(historic_part, historic_part_next, evolution_predict, current_trade))
+            experiences.append(Experience_Trade(state, next_state, evolution_predict, current_trade))
 
         return experiences
 
     def generate_train_test_database(self, historic_trades: pd.DataFrame,
-                                        nb_iteration_historic: List[int], nb_min_historic: List[int],
-                                        duration_future: int,
+                                        scaler: Scaler_Trade,
                                         evolution_method: Callable,
                                         ratio_unsynchrnous_time: float=0.66, 
                                         ratio_train_test: float=0.8
@@ -164,16 +210,14 @@ class Generator_Trade:
         # Generate Train Database
         ## Synchronous
         exp_sync_train = self._get_synchronous_experiences(train_arr, 
-                                    nb_iteration_historic, nb_min_historic, 
-                                    duration_future,
+                                    scaler,
                                     evolution=evolution_train
                                     )
         ## Unsynchronous
         len_synchronized_train = len(exp_sync_train)
         nb_train_asynchronous = int(len_synchronized_train/ratio_unsynchrnous_time)
         exp_unsync_train = self._get_unsynchronous_experiences(train_arr, nb_train_asynchronous,
-                                    nb_iteration_historic, nb_min_historic,
-                                    duration_future,
+                                    scaler,
                                     evolution=evolution_train
                                     )
         experiences_train = exp_sync_train + exp_unsync_train
@@ -181,8 +225,7 @@ class Generator_Trade:
 
         ### Generate Test Database
         experiences_test = self._get_synchronous_experiences(test_arr, 
-                                    nb_iteration_historic, nb_min_historic,
-                                    duration_future,
+                                    scaler,
                                     )
         if self.verbose:
             print('Train/test database generated')

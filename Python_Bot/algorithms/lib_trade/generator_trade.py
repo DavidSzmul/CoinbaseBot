@@ -34,6 +34,7 @@ class Generator_Trade:
         self.normalizer = Normalizer()
         self._fit_normalizer(historic_trades)
 
+     
     #TODO: May be improved
     def _fit_normalizer(self, historic_trades: pd.DataFrame) -> None:
         '''Fit Normalizer to inputs
@@ -43,8 +44,15 @@ class Generator_Trade:
 
         # OR maybe use diff_prc, already normalized
         self.normalizer.fit(historic_trades)
-        
-    def _normalize(self, historic_trades: DataFrame) -> np.ndarray:
+    
+    def _get_diff_pct_trade(self, raw_historic: np.ndarray) -> np.ndarray:
+        '''From historic get percentage difference of a list'''
+        pct = np.diff(raw_historic, axis=0) / raw_historic[:-1, :]
+        pct = np.concatenate((np.zeros((1, np.shape(pct)[1])), pct), axis=0)
+        return pct
+
+
+    def _normalize(self, historic_trades: pd.DataFrame) -> np.ndarray:
         '''Normalization of inputs
         Preprocessing: Normalize inputs in order to train efficiently Agent'''
         return self.normalizer.transform(historic_trades.to_numpy())
@@ -85,9 +93,10 @@ class Generator_Trade:
 
         # Loop
         for idx_present in range(min_index_research, np.shape(historic_normalized)[0]-duration_future):
-
-            historic_part = historic_normalized[idx_present+idx_window, :]          # State
-            historic_part_next = historic_normalized[idx_present+idx_window+1, :]   # Next state
+            
+            idx_current_window = np.array(idx_window) + idx_present
+            historic_part = historic_normalized[idx_current_window, :]          # State
+            historic_part_next = historic_normalized[idx_current_window+1, :]   # Next state
 
             evolution_predict = None
             if evolution: # In train mode
@@ -127,8 +136,10 @@ class Generator_Trade:
             evolution_predict = np.zeros((nb_crypto, ))
 
             for j in range(nb_crypto):
-                historic_part[:,j] = historic_trades[idx_time[j]+idx_window, j]     # State
-                historic_part_next[j] = historic_trades[idx_time[j]+idx_window, j]  # Next state
+
+                idx_current_window = np.array(idx_window) + idx_time[j]
+                historic_part[:,j] = historic_trades[idx_current_window, j]         # State
+                historic_part_next[:,j] = historic_trades[idx_current_window+1, j]  # Next state
                 evolution_predict[j] = evolution[idx_time[j], j]                    # Evolution related to reward
             current_trade = None # Useless for training
             

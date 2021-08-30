@@ -9,14 +9,14 @@ from datetime import datetime, timedelta
 import urllib
 import requests
 
-from Database import Historic_dtb
+from database import Historic_coinbase_dtb
 
 class Historic_Generator(ABC):
     '''Abstract Class to let the possibility to generate Historic based on multiple method'''
 
     @abstractmethod
     def update_dtb(self, maxSizeDtb: int,
-                    resolution: Historic_dtb.Resolution_Historic, 
+                    resolution, 
                     path: str,
                     verbose: bool):
         '''Update Historic based on current time'''
@@ -24,18 +24,18 @@ class Historic_Generator(ABC):
 class Historic_Coinbase_Generator(Historic_Generator):
     '''Update Historic of crypto-values based on Coinbase API'''
 
-    def isResolutionValid(self, resolution: Historic_dtb.Resolution_Historic):
-        res_historic = Historic_dtb.Resolution_Historic 
+    def isResolutionValid(self, resolution: Historic_coinbase_dtb.Resolution_Historic):
+        res_historic = Historic_coinbase_dtb.Resolution_Historic 
         self.possible_resolutions = {res_historic.min: 60, res_historic.hour: 3600, res_historic.day: 86400}
         assert resolution in self.possible_resolutions, "Resolution must be contained in Resolution_Historic"
         return True
 
-    def getTimeResolution(self, resolution: Historic_dtb.Resolution_Historic):
+    def getTimeResolution(self, resolution: Historic_coinbase_dtb.Resolution_Historic):
         self.isResolutionValid(resolution)
         return self.possible_resolutions[self.resolution]
 
     def update_dtb(self, maxSizeDtb: int=1e4, 
-                    resolution:Historic_dtb.Resolution_Historic = Historic_dtb.Resolution_Historic.min, 
+                    resolution:Historic_coinbase_dtb.Resolution_Historic = Historic_coinbase_dtb.Resolution_Historic.min, 
                     path: str=None,
                     verbose = False):
         '''Complete Database based on current time'''
@@ -51,8 +51,8 @@ class Historic_Coinbase_Generator(Historic_Generator):
         ts = int(((now-dt).timestamp()//60)*60)
         
         # Load Database
-        crypto_names = [d['coinbase_name'] for d in Historic_dtb.load_studied_crypto()]
-        df = Historic_dtb.load(self.resolution, path)
+        crypto_names = [d['coinbase_name'] for d in Historic_coinbase_dtb.load_studied_crypto()]
+        df = Historic_coinbase_dtb.load(self.resolution, path)
         if verbose: print('Database loaded...')
 
         # 1) Complete dataframe with new timestamps + studied crytpo
@@ -110,7 +110,7 @@ class Historic_Coinbase_Generator(Historic_Generator):
         df=fill_nan_df(df)
 
         # Save Database
-        Historic_dtb.save(self.resolution, df, path)
+        Historic_coinbase_dtb.save(self.resolution, df, path)
         if verbose: print('Database saved...')
 
 
@@ -171,7 +171,7 @@ def call_Coinbase_api(start: int=0, end: int=0, step: int=60, crypto: str='BTC-U
 
 if __name__ =="__main__":
 
-    resolution = Historic_dtb.Resolution_Historic.min
+    resolution = Historic_coinbase_dtb.Resolution_Historic.min
     Dtb = Historic_Coinbase_Generator()
     Dtb.update_dtb(maxSizeDtb=1e3,
                     resolution=resolution,

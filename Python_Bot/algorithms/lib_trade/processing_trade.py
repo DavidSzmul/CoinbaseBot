@@ -2,9 +2,11 @@ from sklearn.preprocessing import StandardScaler
 import numpy as np
 import pandas as pd
 import random
-from typing import Callable, List
+from typing import List
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
+from enum import Enum
+
 
 class Scaler_Trade:
 
@@ -18,6 +20,20 @@ class Scaler_Trade:
         self.default_scaler = StandardScaler(with_mean=False) # Supposed to be centered at 0
         self.nb_min_historic = nb_min_historic
         self.nb_iteration_historic = nb_iteration_historic
+
+    def get_idx_window_historic(self) -> List[int]:
+        '''Function generating the window of indexes to obtain an historic state of trades'''
+        if not self.nb_iteration_historic and not self.nb_min_historic:
+            return None
+        if len(self.nb_iteration_historic) != len(self.nb_min_historic):
+            raise ValueError('nb_iteration_historic and nb_min_historic parameters must have equivalent length')
+        
+        idx_step = []
+        for nb_iter, nb_min in zip(self.nb_iteration_historic, self.nb_min_historic):
+            idx_step = idx_step + [-nb_min for _ in range(nb_iter)]
+        idx_window = list(np.cumsum(idx_step) - idx_step[0])
+        idx_window.reverse()
+        return idx_window
 
 
     def _get_std_list_normalize(self, list_std: List)-> List: 
@@ -129,20 +145,6 @@ class Generator_Trade:
 
     verbose: bool=False
 
-    def _get_idx_window_historic(self, scaler: Scaler_Trade) -> List[int]:
-        '''Function generating the window of indexes to obtain an historic state of trades'''
-        if not scaler.nb_iteration_historic and not scaler.nb_min_historic:
-            return None
-        if len(scaler.nb_iteration_historic) != len(scaler.nb_min_historic):
-            raise ValueError('nb_iteration_historic and nb_min_historic parameters must have equivalent length')
-        
-        idx_step = []
-        for nb_iter, nb_min in zip(scaler.nb_iteration_historic, scaler.nb_min_historic):
-            idx_step = idx_step + [-nb_min for _ in range(nb_iter)]
-        idx_window = list(np.cumsum(idx_step) - idx_step[0])
-        idx_window.reverse()
-        return idx_window
-
     def _normalize_experiences(self, experiences: List[Experience_Trade], scaler: Scaler_Trade):
         for idx, exp in enumerate(experiences):
             experiences[idx].state, _ = scaler.transform(exp.state)
@@ -155,7 +157,7 @@ class Generator_Trade:
 
         # Initialization
         experiences = []
-        idx_window = self._get_idx_window_historic(scaler)
+        idx_window = scaler.get_idx_window_historic()
         min_index_research = -idx_window[0]+1
         arr_trades = historic_trades.to_numpy()
 
@@ -196,7 +198,7 @@ class Generator_Trade:
         if nb_experience == 0:
             return None
         experiences = []
-        idx_window = self._get_idx_window_historic(scaler)
+        idx_window = scaler.get_idx_window_historic()
         min_index_research = -idx_window[0]+1
         
         arr_trades = historic_trades.to_numpy()
@@ -281,3 +283,11 @@ class Generator_Trade:
         if self.verbose:
             print('Train/test database generated')
         return experiences_train, experiences_test
+
+
+class Mode_Algo(Enum):
+    '''Mode to use in order to define way to use classes'''
+    train = 1
+    test = 2
+    real_time = 3
+

@@ -1,16 +1,16 @@
 import unittest
 import pandas as pd
 import numpy as np
-from algorithms.lib_trade.generator_trade import Scaler_Trade, Evolution_Trade_Median, Generator_Trade
+from algorithms.lib_trade.processing_trade import *
 
-class TestNormalizerTrade(unittest.TestCase):
+class TestScalerTrade(unittest.TestCase):
     
     @classmethod
     def setUpClass(self):
         '''Init Class'''
         # Initialize a fixed dataframe
         # Generate a fixed linear dataframe for many trades
-        trades = ['BTC', 'ETH', 'BTC', 'ETC']
+        trades = ['BTC', 'ETH', 'BTH', 'ETC']
         SIZE = 1000
         OFFSET = 10000
         indexes = np.arange(OFFSET,OFFSET+60*SIZE,60)
@@ -19,6 +19,34 @@ class TestNormalizerTrade(unittest.TestCase):
         for clm in range(np.shape(arr)[1]):
             arr[:,clm] = np.arange(SIZE*clm, SIZE*(clm+1)) + 1 
         self.data = pd.DataFrame(data=arr, index=indexes, columns=trades)
+
+    def test_get_index_window_safety(self):
+        '''Test Index Window Safety'''
+
+        ### For different size
+        nb_min = [1, 10, 1000]
+        nb_iteration = [4, 4]
+        scaler = Scaler_Trade(nb_min, nb_iteration)
+        self.assertRaises(ValueError, scaler.get_idx_window_historic)
+
+        ### For empty size
+        scaler = Scaler_Trade(None, None)
+        self.assertIsNone(scaler.get_idx_window_historic())
+
+    def test_get_index_window_coherence(self):
+        '''Test Index Window Coherence'''
+        nb_min = [1, 10, 100]
+        nb_iteration = [4, 4, 4]
+        valid_answer = [-443, -343, -243, -143, 
+                        -43, -33, -23, -13, 
+                        -3, -2 ,-1, 0]
+
+        # Scaler definition
+        scaler = Scaler_Trade(nb_min, nb_iteration)
+        idx_window = scaler.get_idx_window_historic()
+
+        test_valid = np.all(idx_window==valid_answer)
+        self.assertTrue(test_valid)
 
     def test_get_pct_change(self):
         '''Test Pct Change'''
@@ -166,39 +194,6 @@ class TestGeneratorTrade(unittest.TestCase):
     def tearDownClass(self):
         '''End Class'''
         pass    
-
-    def test_get_index_window_safety(self):
-        '''Test Index Window Safety'''
-        
-        gen = Generator_Trade(verbose=False)
-
-        ### For different size
-        nb_min = [1, 10, 1000]
-        nb_iteration = [4, 4]
-        scaler = Scaler_Trade(nb_min, nb_iteration)
-        self.assertRaises(ValueError, gen._get_idx_window_historic, scaler)
-
-        ### For empty size
-        scaler = Scaler_Trade(None, None)
-        self.assertIsNone(gen._get_idx_window_historic(scaler))
-
-    def test_get_index_window_coherence(self):
-        '''Test Index Window Coherence'''
-        nb_min = [1, 10, 100]
-        nb_iteration = [4, 4, 4]
-        valid_answer = [-443, -343, -243, -143, 
-                        -43, -33, -23, -13, 
-                        -3, -2 ,-1, 0]
-
-        gen = Generator_Trade(verbose=False)
-
-        # Scaler definition
-        scaler = Scaler_Trade(nb_min, nb_iteration)
-        idx_window = gen._get_idx_window_historic(scaler)
-
-        test_valid = np.all(idx_window==valid_answer)
-        self.assertTrue(test_valid)
-    
 
     def test_synchronous_generator(self):
 

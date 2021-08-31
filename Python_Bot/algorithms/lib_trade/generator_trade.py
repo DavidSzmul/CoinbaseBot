@@ -1,5 +1,6 @@
 from sklearn.preprocessing import StandardScaler
 import numpy as np
+import numpy.matlib as mb
 import pandas as pd
 import random
 from typing import Callable, List
@@ -18,25 +19,24 @@ class Scaler_Trade:
         self.nb_min_historic = nb_min_historic
         self.nb_iteration_historic = nb_iteration_historic
 
-    def _get_diff_pct_trade(self, raw_historic: np.ndarray) -> np.ndarray:
-        '''From historic get percentage difference of a list'''
-        pct = np.diff(raw_historic, axis=0) / raw_historic[:-1, :]
-        pct = np.concatenate((np.zeros((1, np.shape(pct)[1])), pct), axis=0)
-        return pct
-
-    def _set_std_2_scaler(self, list_std: List):
-        self.default_scaler.fit([
-            [0]*len(list_std), 
-            2*np.array(list_std)]
-        )
 
     def _get_std_list_normalize(self, list_std: List)-> List: 
-
         list_normalizer_std = []
         for std, nb_iter in zip(list_std, self.nb_iteration_historic):
             list_normalizer_std += [std]*nb_iter
         list_normalizer_std.reverse()
         return list_normalizer_std
+
+    def reset_scaler(self, list_std: List):
+        '''Change the form of scaler depending of number of trades
+        (based on previously saved std)'''
+        std_state = np.array(list_std)
+        # Calibration
+        states_calibration = np.array([
+            0*std_state,
+            2*std_state
+        ])
+        self.default_scaler.fit(states_calibration)
 
     def fit(self, historic_trades: pd.DataFrame):
         '''Fit normalization based on historic data'''
@@ -47,17 +47,29 @@ class Scaler_Trade:
         # Get pct change for all trades depending on number of minutes
         for nb_min in self.nb_min_historic:
             buff_trades = arr_trades[::nb_min,:]
-            pct_change = self._get_diff_pct_trade(buff_trades)
+            pct_change = self.get_pct_change(buff_trades)
             list_std.append(np.std(pct_change))
 
         # Get all std of pct change (depending on minute) and send it to scaler
         list_normalizer_std = self._get_std_list_normalize(list_std)
-        self._set_std_2_scaler(list_normalizer_std)
+        self.reset_scaler(list_normalizer_std)
 
-    def transform(self, state: np.ndarray):
-        '''Transform state with raw values to normalized pct_change values'''
-        pct_change = self._get_diff_pct_trade(state)
-        return self.default_scaler.transform(pct_change)
+    def get_pct_change(self, raw_historic: np.ndarray) -> np.ndarray:
+        '''From historic get percentage difference of a list'''
+        pct = np.diff(raw_historic, axis=0) / raw_historic[:-1, :]
+        pct = np.concatenate((np.zeros((1, np.shape(pct)[1])), pct), axis=0)
+        return pct
+
+    def transform_prc_change(self, prc_change: np.ndarray)-> np.ndarray:
+        '''Normalize prc_change (transpose due to shape of state)'''
+        return self.default_scaler.transform(prc_change.T).T 
+
+    def transform(self, state: np.ndarray) -> np.ndarray:
+        '''Normalize state after moving to prc_change'''
+        prc_change = self.get_pct_change(state)
+        normalized_prc = self.transform_prc_change(prc_change)
+        return normalized_prc, prc_change
+
 
         
 
@@ -78,8 +90,6 @@ class Experience_Trade:
 class Generator_Trade:
     '''Class that enables to generate Train/Test database especially for trades'''
 
-    nb_min_historic: List[int]
-    nb_iteration_historic: List[int]
     duration_future: int
     verbose: bool=False
 
@@ -88,15 +98,15 @@ class Generator_Trade:
         Used for reward calculation during RL training'''
         return evolution_method(historic_trades)
 
-    def _get_idx_window_historic(self, nb_iteration_historic: List[int], nb_min_historic: List[int]) -> List[int]:
+    def _get_idx_window_historic(self, scaler: Scaler_Trade) -> List[int]:
         '''Function generating the window of indexes to obtain an historic state of trades'''
-        if not nb_iteration_historic and not nb_min_historic:
+        if not scaler.nb_iteration_historic and not scaler.nb_min_historic:
             return None
-        if len(nb_iteration_historic) != len(nb_min_historic):
+        if len(scaler.nb_iteration_historic) != len(scaler.nb_min_historic):
             raise ValueError('nb_iteration_historic and nb_min_historic parameters must have equivalent length')
         
         idx_step = []
-        for nb_iter, nb_min in zip(nb_iteration_historic, nb_min_historic):
+        for nb_iter, nb_min in zip(scaler.nb_iteration_historic, scaler.nb_min_historic):
             idx_step = idx_step + [-nb_min for _ in range(nb_iter)]
         idx_window = list(np.cumsum(idx_step) - idx_step[0])
         idx_window.reverse()
@@ -109,7 +119,7 @@ class Generator_Trade:
 
         # Initialization
         experiences = []
-        idx_window = self._get_idx_window_historic(self.nb_iteration_historic, self.nb_min_historic)
+        idx_window = self._get_idx_window_historic(scaler)
         min_index_research = -idx_window[0]+1
         arr_trades = historic_trades.to_numpy()
 
@@ -122,8 +132,8 @@ class Generator_Trade:
             next_state = arr_trades[idx_current_window+1, :]   
 
             # Normalization of states
-            state = scaler.transform(state)
-            next_state = scaler.transform(state)
+            state, _ = scaler.transform(state)
+            next_state, _ = scaler.transform(next_state)
             
             # Evolution based on present (related to reward)
             evolution_predict = None
@@ -131,7 +141,7 @@ class Generator_Trade:
                 evolution_predict = evolution[idx_present,:]
 
             # Share real trade value over present
-            current_trade = arr_trades.iloc[[idx_present]]
+            current_trade = historic_trades.iloc[[idx_present]]
             experiences.append(Experience_Trade(state, next_state, evolution_predict, current_trade))
 
         return experiences
@@ -150,7 +160,7 @@ class Generator_Trade:
         arr_trades = historic_trades.to_numpy()
 
         experiences = []
-        idx_window = self._get_idx_window_historic(self.nb_iteration_historic, self.nb_min_historic)
+        idx_window = self._get_idx_window_historic(scaler)
         min_index_research = -idx_window[0]+1
         nb_crypto = np.shape(arr_trades)[1]
         
@@ -175,7 +185,7 @@ class Generator_Trade:
             
             # Normalization of states
             state = scaler.transform(state)
-            next_state = scaler.transform(state)
+            next_state = scaler.transform(next_state)
 
             current_trade = None # Useless for training
             

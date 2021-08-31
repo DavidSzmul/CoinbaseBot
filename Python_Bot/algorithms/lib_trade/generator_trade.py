@@ -4,6 +4,7 @@ import pandas as pd
 import random
 from typing import Callable, List
 from dataclasses import dataclass
+from abc import ABC, abstractmethod
 
 class Scaler_Trade:
 
@@ -18,25 +19,24 @@ class Scaler_Trade:
         self.nb_min_historic = nb_min_historic
         self.nb_iteration_historic = nb_iteration_historic
 
-    def _get_diff_pct_trade(self, raw_historic: np.ndarray) -> np.ndarray:
-        '''From historic get percentage difference of a list'''
-        pct = np.diff(raw_historic, axis=0) / raw_historic[:-1, :]
-        pct = np.concatenate((np.zeros((1, np.shape(pct)[1])), pct), axis=0)
-        return pct
-
-    def _set_std_2_scaler(self, list_std: List):
-        self.default_scaler.fit([
-            [0]*len(list_std), 
-            2*np.array(list_std)]
-        )
 
     def _get_std_list_normalize(self, list_std: List)-> List: 
-
         list_normalizer_std = []
         for std, nb_iter in zip(list_std, self.nb_iteration_historic):
             list_normalizer_std += [std]*nb_iter
         list_normalizer_std.reverse()
         return list_normalizer_std
+
+    def reset_scaler(self, list_std: List):
+        '''Change the form of scaler depending of number of trades
+        (based on previously saved std)'''
+        std_state = np.array(list_std)
+        # Calibration
+        states_calibration = np.array([
+            0*std_state,
+            2*std_state
+        ])
+        self.default_scaler.fit(states_calibration)
 
     def fit(self, historic_trades: pd.DataFrame):
         '''Fit normalization based on historic data'''
@@ -47,20 +47,69 @@ class Scaler_Trade:
         # Get pct change for all trades depending on number of minutes
         for nb_min in self.nb_min_historic:
             buff_trades = arr_trades[::nb_min,:]
-            pct_change = self._get_diff_pct_trade(buff_trades)
+            pct_change = self.get_pct_change(buff_trades)
             list_std.append(np.std(pct_change))
 
         # Get all std of pct change (depending on minute) and send it to scaler
         list_normalizer_std = self._get_std_list_normalize(list_std)
-        self._set_std_2_scaler(list_normalizer_std)
+        self.reset_scaler(list_normalizer_std)
 
-    def transform(self, state: np.ndarray):
-        '''Transform state with raw values to normalized pct_change values'''
-        pct_change = self._get_diff_pct_trade(state)
-        return self.default_scaler.transform(pct_change)
+    def get_pct_change(self, raw_historic: np.ndarray) -> np.ndarray:
+        '''From historic get percentage difference of a list'''
+        pct = np.diff(raw_historic, axis=0) / raw_historic[:-1, :]
+        pct = np.concatenate((np.zeros((1, np.shape(pct)[1])), pct), axis=0)
+        return pct
 
+    def transform_prc_change(self, prc_change: np.ndarray)-> np.ndarray:
+        '''Normalize prc_change (transpose due to shape of state)'''
+        return self.default_scaler.transform(prc_change.T).T 
+
+    def transform(self, state: np.ndarray) -> np.ndarray:
+        '''Normalize state after moving to prc_change'''
+        prc_change = self.get_pct_change(state)
+        normalized_prc = self.transform_prc_change(prc_change)
+        return normalized_prc, prc_change
+
+class Evolution_Trade(ABC):
+    @abstractmethod
+    def get_evolution(self, historic: pd.DataFrame):
+        '''Method to get evolution of trade, used to estimate reward for Reinforcement Learning'''
+
+    @abstractmethod
+    def get_time_anticipation(self) ->int:
+        '''Method to get the maximum time needed to calculate evolution'''
+
+class Evolution_Trade_Median(Evolution_Trade):
+    '''Class estimating evolution of trades based on median'''
+
+    _start_check_future: int # Start of anticipation
+    _end_check_future: int   # End   of anticipation
+    def __init__(self, start_check_future, end_check_future):
+        if not start_check_future or not end_check_future:
+            raise ValueError('Parameters shall not be None')
+        if start_check_future>end_check_future:
+            raise ValueError('Start has to be inferior compared to end')
+        if start_check_future<=0:
+            raise ValueError('Start has to be strictly superior to zero')
         
+        self._start_check_future = start_check_future
+        self._end_check_future = end_check_future
 
+    def get_evolution(self, historic: np.ndarray) -> np.ndarray:
+        '''Evolution based on median'''
+        evolution = np.zeros(historic.shape)
+
+        for i in range(historic.shape[0] - self._end_check_future +1):
+            array_window = historic[i + np.arange(self._start_check_future, self._end_check_future), :]
+            evolution[i,:] = np.median(array_window, axis=0)/historic[i,:] - 1
+        return evolution
+    
+    def get_time_anticipation(self) ->int:
+        '''Max timing to get anticipation'''
+        return self._end_check_future
+
+    
+            
 @dataclass
 class Experience_Trade:
     '''Correspond to one timing containing all informations based on trades to use RL
@@ -78,91 +127,96 @@ class Experience_Trade:
 class Generator_Trade:
     '''Class that enables to generate Train/Test database especially for trades'''
 
-    nb_min_historic: List[int]
-    nb_iteration_historic: List[int]
-    duration_future: int
     verbose: bool=False
 
-    def _get_evolution(self, historic_trades: np.ndarray, evolution_method: Callable) -> np.ndarray:
-        '''Call of the method to extract evolution of trades.
-        Used for reward calculation during RL training'''
-        return evolution_method(historic_trades)
-
-    def _get_idx_window_historic(self, nb_iteration_historic: List[int], nb_min_historic: List[int]) -> List[int]:
+    def _get_idx_window_historic(self, scaler: Scaler_Trade) -> List[int]:
         '''Function generating the window of indexes to obtain an historic state of trades'''
-        if not nb_iteration_historic and not nb_min_historic:
+        if not scaler.nb_iteration_historic and not scaler.nb_min_historic:
             return None
-        if len(nb_iteration_historic) != len(nb_min_historic):
+        if len(scaler.nb_iteration_historic) != len(scaler.nb_min_historic):
             raise ValueError('nb_iteration_historic and nb_min_historic parameters must have equivalent length')
         
         idx_step = []
-        for nb_iter, nb_min in zip(nb_iteration_historic, nb_min_historic):
+        for nb_iter, nb_min in zip(scaler.nb_iteration_historic, scaler.nb_min_historic):
             idx_step = idx_step + [-nb_min for _ in range(nb_iter)]
         idx_window = list(np.cumsum(idx_step) - idx_step[0])
         idx_window.reverse()
         return idx_window
 
+    def _normalize_experiences(self, experiences: List[Experience_Trade], scaler: Scaler_Trade):
+        for idx, exp in enumerate(experiences):
+            experiences[idx].state, _ = scaler.transform(exp.state)
+            experiences[idx].next_state, _ = scaler.transform(exp.next_state)
+
     def _get_synchronous_experiences(self, historic_trades: pd.DataFrame,
                                 scaler: Scaler_Trade,
-                                evolution: np.ndarray=None) -> List[Experience_Trade]:
+                                evolution_meth: Evolution_Trade=None) -> List[Experience_Trade]:
         '''Generate synchronous experiences based on duration of past and future used for input/evolution'''
 
         # Initialization
         experiences = []
-        idx_window = self._get_idx_window_historic(self.nb_iteration_historic, self.nb_min_historic)
+        idx_window = self._get_idx_window_historic(scaler)
         min_index_research = -idx_window[0]+1
         arr_trades = historic_trades.to_numpy()
 
+        # Extract evolution based on classmethod
+        arr_evolution = None
+        idx_anticipation = 0
+        if evolution_meth: # If method defined
+            arr_evolution = evolution_meth.get_evolution(arr_trades)
+            idx_anticipation = evolution_meth.get_time_anticipation()
+
         # Loop over present
-        for idx_present in range(min_index_research, np.shape(arr_trades)[0]-self.duration_future):
+        for idx_present in range(min_index_research, np.shape(arr_trades)[0]-idx_anticipation):
             
             # Extract states based on present
             idx_current_window = np.array(idx_window) + idx_present
             state = arr_trades[idx_current_window, :]          
             next_state = arr_trades[idx_current_window+1, :]   
-
-            # Normalization of states
-            state = scaler.transform(state)
-            next_state = scaler.transform(state)
             
-            # Evolution based on present (related to reward)
-            evolution_predict = None
-            if evolution: # In train mode
-                evolution_predict = evolution[idx_present,:]
+            # Evolution based on classmethod 
+            evolution = None
+            if arr_evolution is not None: # If evolution defined
+                evolution = arr_evolution[idx_present,:]
 
             # Share real trade value over present
-            current_trade = arr_trades.iloc[[idx_present]]
-            experiences.append(Experience_Trade(state, next_state, evolution_predict, current_trade))
+            current_trade = historic_trades.iloc[[idx_present]]
+            experiences.append(Experience_Trade(state, next_state, evolution, current_trade))
 
+        # Normalize experiences
+        self._normalize_experiences(experiences, scaler)
         return experiences
 
     def _get_unsynchronous_experiences(self, historic_trades: np.ndarray, nb_experience: int,
                                         scaler: Scaler_Trade,
-                                        evolution: np.ndarray=None) -> List[Experience_Trade]:
+                                        evolution_meth: Evolution_Trade=None) -> List[Experience_Trade]:
         '''Generate unsynchronous experiences (different trades on different timings to augment database. Only for train)'''
         
         # Initialization
         if nb_experience == 0:
             return None
-        if evolution is None:
-            raise ValueError('evolution shall not be null for unsynchronous experiences')
-
-        arr_trades = historic_trades.to_numpy()
-
         experiences = []
-        idx_window = self._get_idx_window_historic(self.nb_iteration_historic, self.nb_min_historic)
+        idx_window = self._get_idx_window_historic(scaler)
         min_index_research = -idx_window[0]+1
+        
+        arr_trades = historic_trades.to_numpy()
         nb_crypto = np.shape(arr_trades)[1]
         
+        # Extract evolution based on classmethod
+        arr_evolution = None
+        idx_anticipation = 0
+        if evolution_meth: # If method defined
+            arr_evolution = evolution_meth.get_evolution(arr_trades)
+            idx_anticipation = evolution_meth.get_time_anticipation()
+        
         # Loop
-        Range_t = list(range(min_index_research, np.shape(arr_trades)[0]-self.duration_future))
+        Range_t = list(range(min_index_research, np.shape(arr_trades)[0]- idx_anticipation))
         for _ in range(nb_experience):
 
             ### Choose random present for each crypto
             idx_time = random.sample(Range_t, nb_crypto)
             state = np.zeros((len(idx_window), nb_crypto))
             next_state = np.zeros((len(idx_window), nb_crypto))
-            evolution_predict = np.zeros((nb_crypto, ))
 
             for j in range(nb_crypto): # Over each crypto
                 # Extract states based on timing
@@ -170,22 +224,20 @@ class Generator_Trade:
                 state[:,j] = arr_trades[idx_current_window, j]         
                 next_state[:,j] = arr_trades[idx_current_window+1, j]  
 
-                # Evolution based on present (related to reward)
-                evolution_predict[j] = evolution[idx_time[j], j]                    
-            
-            # Normalization of states
-            state = scaler.transform(state)
-            next_state = scaler.transform(state)
+            # Evolution based on classmethod 
+            evolution = None
+            if arr_evolution is not None: # If evolution defined
+                evolution = np.array([arr_evolution[idx_time[j], j] for j in range(nb_crypto)])                
+            current_trade = None # Useless for unsynchrnous experiences
+            experiences.append(Experience_Trade(state, next_state, evolution, current_trade))
 
-            current_trade = None # Useless for training
-            
-            experiences.append(Experience_Trade(state, next_state, evolution_predict, current_trade))
-
+        # Normalize experiences
+        self._normalize_experiences(experiences, scaler)
         return experiences
 
     def generate_train_test_database(self, historic_trades: pd.DataFrame,
                                         scaler: Scaler_Trade,
-                                        evolution_method: Callable,
+                                        evolution_method: Evolution_Trade,
                                         ratio_unsynchrnous_time: float=0.66, 
                                         ratio_train_test: float=0.8
                                         ): 
@@ -202,23 +254,20 @@ class Generator_Trade:
         size_dtb = len(historic_trades.index)        
         idx_cut_train_test = int(ratio_train_test*size_dtb)
         train_arr = historic_trades[:idx_cut_train_test]
-        test_arr = historic_trades[idx_cut_train_test:]
-
-        # Get evolution of trades. Used for reward during training
-        evolution_train = self._get_evolution(train_arr, evolution_method)             
+        test_arr = historic_trades[idx_cut_train_test:]      
             
         # Generate Train Database
         ## Synchronous
         exp_sync_train = self._get_synchronous_experiences(train_arr, 
                                     scaler,
-                                    evolution=evolution_train
+                                    evolution_meth=evolution_method
                                     )
         ## Unsynchronous
         len_synchronized_train = len(exp_sync_train)
         nb_train_asynchronous = int(len_synchronized_train/ratio_unsynchrnous_time)
         exp_unsync_train = self._get_unsynchronous_experiences(train_arr, nb_train_asynchronous,
                                     scaler,
-                                    evolution=evolution_train
+                                    evolution_meth=evolution_method
                                     )
         experiences_train = exp_sync_train + exp_unsync_train
         random.shuffle(experiences_train)
@@ -226,7 +275,9 @@ class Generator_Trade:
         ### Generate Test Database
         experiences_test = self._get_synchronous_experiences(test_arr, 
                                     scaler,
-                                    )
+                                    evolution_meth=None # No need to get evolution for test
+                                    )        
+        
         if self.verbose:
             print('Train/test database generated')
         return experiences_train, experiences_test

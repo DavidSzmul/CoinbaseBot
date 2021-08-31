@@ -1,7 +1,7 @@
 import unittest
 import pandas as pd
 import numpy as np
-from algorithms.lib_trade.generator_trade import Experience_Trade, Scaler_Trade, Generator_Trade
+from algorithms.lib_trade.generator_trade import Scaler_Trade, Evolution_Trade_Median, Generator_Trade
 
 class TestNormalizerTrade(unittest.TestCase):
     
@@ -101,6 +101,49 @@ class TestNormalizerTrade(unittest.TestCase):
         scaler = Scaler_Trade(nb_min_historic, nb_iteration_historic)
         scaler.fit(self.data)
 
+class TestEvolutionTradeMedian(unittest.TestCase):
+
+    def test_init(self):
+        self.assertRaises(ValueError, Evolution_Trade_Median, None, None)
+        self.assertRaises(ValueError, Evolution_Trade_Median, 1, None)
+        self.assertRaises(ValueError, Evolution_Trade_Median, None, 2)
+        self.assertRaises(ValueError, Evolution_Trade_Median, 0, 2)
+        self.assertRaises(ValueError, Evolution_Trade_Median, 3, 2)
+
+        obj = Evolution_Trade_Median(2,10)
+
+    def test_get(self):
+        start = 2
+        end = 5
+        obj = Evolution_Trade_Median(start, end)
+
+        trades = np.array([
+            [10, 10],
+            [10, 10],
+            [27, 1],
+            [30, 2],
+            [25, 1],
+            [25, 5],
+            [15, 6],
+            [17, 10],
+        ])
+        expected_output = np.array([
+            [27, 1],
+            [25, 2],
+            [25, 5],
+            [17, 6],
+            [np.NaN, np.NaN],
+            [np.NaN, np.NaN],
+            [np.NaN, np.NaN],
+            [np.NaN, np.NaN],
+        ])/trades - 1
+        expected_output[4:,:] = 0
+
+        output = obj.get_evolution(trades)
+
+        test_valid = np.all(output==expected_output)
+        self.assertTrue(test_valid)
+
 
 class TestGeneratorTrade(unittest.TestCase):
 
@@ -127,8 +170,7 @@ class TestGeneratorTrade(unittest.TestCase):
     def test_get_index_window_safety(self):
         '''Test Index Window Safety'''
         
-        nb_future = 120
-        gen = Generator_Trade(nb_future, verbose=False)
+        gen = Generator_Trade(verbose=False)
 
         ### For different size
         nb_min = [1, 10, 1000]
@@ -142,17 +184,15 @@ class TestGeneratorTrade(unittest.TestCase):
 
     def test_get_index_window_coherence(self):
         '''Test Index Window Coherence'''
-        
-        nb_future=0
+        nb_min = [1, 10, 100]
+        nb_iteration = [4, 4, 4]
         valid_answer = [-443, -343, -243, -143, 
                         -43, -33, -23, -13, 
                         -3, -2 ,-1, 0]
 
-        gen = Generator_Trade(nb_future, verbose=False)
+        gen = Generator_Trade(verbose=False)
 
         # Scaler definition
-        nb_min = [1, 10, 100]
-        nb_iteration = [4, 4, 4]
         scaler = Scaler_Trade(nb_min, nb_iteration)
         idx_window = gen._get_idx_window_historic(scaler)
 
@@ -168,15 +208,35 @@ class TestGeneratorTrade(unittest.TestCase):
         scaler = Scaler_Trade(nb_min, nb_iteration)
         scaler.fit(self.data)
 
-        # Generate generator
-        duration_future = 20
-        gen = Generator_Trade(duration_future, verbose=False) 
+        # Generate Evolution Method
+        start_future = 60
+        end_future = 120
+        evolution_meth = Evolution_Trade_Median(start_future, end_future)
 
         # Generate synchronous experiences
-        sync_exp = gen._get_synchronous_experiences(self.data, scaler)
-        is_evolution_none_exp = [s.evolution is None for s in sync_exp]
-        test_valid = np.all(is_evolution_none_exp)
-        self.assertTrue(test_valid)
+        gen = Generator_Trade(verbose=False) 
+        sync_exp = gen._get_synchronous_experiences(self.data, scaler, evolution_meth)
+        print('Syncrhonous Generated')
+
+    def test_unsynchronous_generator(self):
+
+        # Create and fit scaler
+        nb_min = [1, 10, 100]
+        nb_iteration = [4, 4, 4]
+        scaler = Scaler_Trade(nb_min, nb_iteration)
+        scaler.fit(self.data)
+
+        # Generate Evolution Method
+        start_future = 60
+        end_future = 120
+        evolution_meth = Evolution_Trade_Median(start_future, end_future)
+
+        # Generate synchronous experiences
+        nb_experiences = 10
+        gen = Generator_Trade(verbose=False) 
+        unsync_exp = gen._get_unsynchronous_experiences(self.data, nb_experiences, scaler, evolution_meth)
+        self.assertTrue(len(unsync_exp)==nb_experiences)
+        print('Unsyncrhonous Generated')
 
 # run the actual unittests
 if __name__ =="__main__":

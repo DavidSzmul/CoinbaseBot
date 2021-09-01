@@ -1,13 +1,13 @@
 from typing import Dict, List
 from dataclasses import dataclass
 
-from coinbase_api.scrapping_transfer_v3_selenium import Coinbase_Transaction_Scrapper
+from algorithms.lib_trade.transactioner import Transactioner
 
 @dataclass
 class Account:
     amount: float=0
-    value: float=0
-    last_price: float=0
+    value: float=None
+    last_price: float=None
 
 class Portfolio(Dict):
 
@@ -41,7 +41,7 @@ class Portfolio(Dict):
             self[k].value = self[k].amount*self[k].last_price
         self.update_total()
 
-    def add_money(self, value: float, to_: str=None, need_confirmation :bool=True):
+    def add_money(self, value: float, to_: str=None, need_confirmation :bool=False):
         '''Add virtualy money into a specific account'''
 
         if to_ is None:
@@ -90,21 +90,19 @@ class Portfolio(Dict):
         return self.total_value
 
     
+class Portfolio_with_Transactioner(Portfolio):
 
-class Portfolio_Coinbase(Portfolio):
-
-    transactioner: Coinbase_Transaction_Scrapper
+    transactioner: Transactioner
     
-    def __init__(self, account_names: List[str]):
+    def __init__(self, account_names: List[str], transactioner: transactioner):
         '''Create Coinbase Portfolio with associated cryptos'''
 
         super().__init__(account_names)
         # Define StableCoin where real money comes in
         self.stableCoin = 'USDC-USD'
         self[self.stableCoin].last_price = 1
-
         # Add a transactioner to do all required transactions
-        self.transactioner = Coinbase_Transaction_Scrapper(first_connection=False) # Assume it already has been connected
+        self.transactioner = transactioner
 
     def add_money(self, value: float, to_: str=None, need_confirmation : bool=False):
         '''Add money (inherited method, with stableCoin put at default'''
@@ -120,19 +118,19 @@ class Portfolio_Coinbase(Portfolio):
         super().convert_money(from_, to_, value, prc_taxes)
 
 if __name__ == '__main__':
-    from database import historic_dtb
-    crypto_study = [d['coinbase_name'] for d in historic_dtb.load_studied_crypto()]
-    last_prices = {'USDC-USD':1, 'BTC-USD': 30000}
+    # from database import Historic_coinbase_dtb
+    # crypto_study = [d['coinbase_name'] for d in Historic_coinbase_dtb.load_studied_crypto()]
+    # last_prices = {'USDC-USD':1, 'BTC-USD': 30000}
 
-    Ptf_test = Portfolio(crypto_study)
-    Ptf_test.update_last_prices(last_prices)
-    Ptf_test.add_money(50, to_= 'USDC-USD', need_confirmation=False)
+    # Ptf_test = Portfolio(crypto_study)
+    # Ptf_test.update_last_prices(last_prices)
+    # Ptf_test.add_money(50, to_= 'USDC-USD', need_confirmation=False)
 
-    Ptf_test.convert_money('USDC-USD','BTC-USD', 40, prc_taxes=0.01)
-    Ptf_test.display()
+    # Ptf_test.convert_money('USDC-USD','BTC-USD', 40, prc_taxes=0.01)
+    # Ptf_test.display()
 
-    Ptf_test.convert_money('USDC-USD','BTC-USD', 40, prc_taxes=0.01)
-    Ptf_test.display()
+    # Ptf_test.convert_money('USDC-USD','BTC-USD', 40, prc_taxes=0.01)
+    # Ptf_test.display()
 
-    Ptf_test.convert_money('BTC-USD','USDC-USD', 50, prc_taxes=0.01)
-    Ptf_test.display()
+    # Ptf_test.convert_money('BTC-USD','USDC-USD', 50, prc_taxes=0.01)
+    # Ptf_test.display()

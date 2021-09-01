@@ -129,11 +129,13 @@ class Evolution_Trade_Median(Evolution_Trade):
 @dataclass
 class Experience_Trade:
     '''Correspond to one timing containing all informations based on trades to use RL
-    state           -> normalized historic of trades
+    historic        -> normalized historic of trades
+    next_historic   -> normalized next historic of trades
     evolution       -> future evolution of trades (used for reward)
     current_trade   -> Current value of trades
     '''
     state: np.ndarray
+    next_state: np.ndarray
     evolution: np.ndarray
     current_trade: pd.DataFrame
 
@@ -146,6 +148,7 @@ class Generator_Trade:
     def _normalize_experiences(self, experiences: List[Experience_Trade], scaler: Scaler_Trade):
         for idx, exp in enumerate(experiences):
             experiences[idx].state, _ = scaler.transform(exp.state)
+            experiences[idx].next_state, _ = scaler.transform(exp.next_state)
 
     def _get_synchronous_experiences(self, historic_trades: pd.DataFrame,
                                 scaler: Scaler_Trade,
@@ -171,6 +174,7 @@ class Generator_Trade:
             # Extract states based on present
             idx_current_window = np.array(idx_window) + idx_present
             state = arr_trades[idx_current_window, :]          
+            next_state = arr_trades[idx_current_window+1, :]   
             
             # Evolution based on classmethod 
             evolution = None
@@ -179,7 +183,7 @@ class Generator_Trade:
 
             # Share real trade value over present
             current_trade = historic_trades.iloc[[idx_present]]
-            experiences.append(Experience_Trade(state, evolution, current_trade))
+            experiences.append(Experience_Trade(state, next_state, evolution, current_trade))
 
         # Normalize experiences
         self._normalize_experiences(experiences, scaler)
@@ -214,18 +218,20 @@ class Generator_Trade:
             ### Choose random present for each crypto
             idx_time = random.sample(Range_t, nb_crypto)
             state = np.zeros((len(idx_window), nb_crypto))
+            next_state = np.zeros((len(idx_window), nb_crypto))
 
             for j in range(nb_crypto): # Over each crypto
                 # Extract states based on timing
                 idx_current_window = np.array(idx_window) + idx_time[j]
                 state[:,j] = arr_trades[idx_current_window, j]         
+                next_state[:,j] = arr_trades[idx_current_window+1, j]  
 
             # Evolution based on classmethod 
             evolution = None
             if arr_evolution is not None: # If evolution defined
                 evolution = np.array([arr_evolution[idx_time[j], j] for j in range(nb_crypto)])                
             current_trade = None # Useless for unsynchrnous experiences
-            experiences.append(Experience_Trade(state, evolution, current_trade))
+            experiences.append(Experience_Trade(state, next_state, evolution, current_trade))
 
         # Normalize experiences
         self._normalize_experiences(experiences, scaler)

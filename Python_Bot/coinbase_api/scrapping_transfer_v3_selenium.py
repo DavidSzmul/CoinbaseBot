@@ -1,5 +1,4 @@
 ### Modifications due to changes in the coinbase website
-
 import sys, os, time
 import numpy as np
 import pickle
@@ -9,6 +8,7 @@ from selenium.webdriver.chrome.options import Options
 
 import config
 from coinbase_api.encryption import Coinbase_cryption
+from algorithms.lib_trade.transactioner import Transactioner
 
 
 COINBASE_SITE = "https://www.coinbase.com/dashboard"
@@ -35,7 +35,7 @@ def try_(fcn):
     except:
         return False
 
-class Coinbase_Transaction_Scrapper:
+class Coinbase_Transaction_Scrapper(Transactioner):
 
     def __init__(self, first_connection=False):
         self.email = 'david.szmul@gmail.com'

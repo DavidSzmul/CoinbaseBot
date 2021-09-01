@@ -20,6 +20,6 @@ else:
     COINBASE_SCRAPPER_COOKIES = ''
 
 def use_GPU_TF(flag_use_GPU: bool=True):
-    '''Enforce the use of GPU or CPU for Tensorflow'''
+    '''Force the use of GPU or CPU for Tensorflow'''
     os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
     os.environ["CUDA_VISIBLE_DEVICES"]=["-1", "0"][flag_use_GPU]

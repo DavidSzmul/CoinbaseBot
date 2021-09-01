@@ -27,13 +27,13 @@ class Environment(ABC):
         if np.shape(state) != self.state_shape:
             raise ValueError("Size of state is not corrsponding with environment")
 
-    def get_state_shape(self):
+    def get_state_shape(self) -> np.ndarray:
         return self.state_shape
 
-    def get_action_shape(self):
+    def get_action_shape(self) -> np.ndarray:
         return self.action_shape
 
-    def get_state(self):
+    def get_state(self) -> np.ndarray:
         return self.state
 
 class Default_Env(Environment):

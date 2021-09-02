@@ -22,7 +22,7 @@ class DQN_parameters:
     memory_size: int=50000          # Size of Memory         
     batch_size: int=32              # Batch size of Memory
 
-    epsilon_err = 1e-5              # Epsilon to clip reward stricly inferior to [-1,1]
+    epsilon_err = 1e-6              # Epsilon to clip reward stricly inferior to [-1,1]
 
 class DQN_Agent(Agent):
     """Agent using Deep Q Learning"""
@@ -84,6 +84,10 @@ class DQN_Agent(Agent):
         # Neural Net for Deep-Q learning Model
         return NetworkGenerator().create_DQN_Model(self.state_shape, self.action_shape, 
                                 layers=layers_model, learning_rate=self.params.learning_rate)
+
+
+    def save_weights(self, filepath, overwrite=False):
+        keras.models.save_model(self.model, filepath, overwrite=overwrite)
 
     def _clip_reward(self, reward: float) -> float:
         #Clip of reward

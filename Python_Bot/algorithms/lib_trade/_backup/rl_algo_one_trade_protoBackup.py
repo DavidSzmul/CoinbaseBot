@@ -4,12 +4,19 @@ from enum import Enum
 from typing import Callable
 import numpy as np
 import random
+from typing import List
 
+from pandas.core.frame import DataFrame
+
+from database import Historic_coinbase_dtb
 from rl_lib.environment.environment import Environment
 from rl_lib.agent.agent import Agent
 from rl_lib.agent.dqn import DQN_Agent, DQN_parameters
+from rl_lib.agent.executor import Executor
 from displayer.displayer import Displayer
-
+from algorithms.lib_trade.portfolio import Portfolio, Portfolio_Coinbase
+from algorithms.lib_trade.algo_one_trade import Experience_Trade, Exchanged_Var_Environment_Trading, Environment_Compare_Trading
+from algorithms.lib_trade.train_test_generator_trade import Train_Test_Generator_Trade
 
 class Mode_Algo(Enum):
     train = 1

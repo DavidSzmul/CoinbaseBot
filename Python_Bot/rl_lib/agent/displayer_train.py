@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from collections import deque
 
 from displayer.displayer import Displayer
-from RL_lib.agent.executor import Train_perfs
+from rl_lib.agent.manager import Train_perfs
 
 class Displayer_Train_MATPLOTLIB(Displayer):
 

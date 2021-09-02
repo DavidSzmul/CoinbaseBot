@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Callable, Dict, List, Tuple
 from dataclasses import dataclass
 
 from algorithms.lib_trade.transactioner import Transactioner
@@ -50,17 +50,19 @@ class Portfolio(Dict[str, Account]):
         '''Dictionary containing all accounts of cryptocurrency'''
         super().__init__()
         if accounts:
-            for a in accounts:
-                self[a.name] = a
-            return
+            self.set_accounts(accounts)
+
         elif last_prices:
             for k,price in last_prices.items():
                 self[k] = Account(k, price)
-            return
-        raise ValueError('At least one parameter has to be used')
+        
 
     def set_account(self, account: Account):
         self[account.name] = account
+
+    def set_accounts(self, accounts: List[Account]):
+        for a in accounts:
+            self.set_account(a)
 
     def _update_total(self):
         '''Update total value of portfolio'''
@@ -68,11 +70,15 @@ class Portfolio(Dict[str, Account]):
         for k in self.keys():
             self.__total_value += self[k].value
 
-    def update(self, last_prices: Dict):
+    def update(self, last_prices: Dict[str, float]):
         '''Update last price of each cryptocurrency account'''
-        for k in last_prices.keys():
-            if k in self:
-                self[k].update(last_prices[k])
+        for k, last_price in last_prices.items():
+            # Add account if new last price not included into portfolio
+            if k not in self:
+                # Expect that no amount is included
+                self.set_account(Account(k, last_price, amount=0)) 
+            else:
+                self[k].update(last_price)
         self._update_total()
 
     def add_money(self, to_: str, value: float):
@@ -115,44 +121,21 @@ class Portfolio_with_Transactioner(Portfolio):
 
     transactioner: Transactioner
     
-    def __init__(self, account_names: List[str], transactioner: Transactioner):
-        '''Create Coinbase Portfolio with associated cryptos'''
-
-        super().__init__(account_names)
-        # Define StableCoin where real money comes in
-        self.stableCoin = 'USDC-USD'
-        self[self.stableCoin].last_price = 1
-        # Add a transactioner to do all required transactions
+    def __init__(self, transactioner: Transactioner, last_prices: Dict[str, float]=None, accounts: List[Account]=None):
+        '''Create Portfolio with associated Transactioner'''
+        super().__init__(last_prices=last_prices, accounts=accounts)
         self.transactioner = transactioner
 
-    def add_money(self, value: float, to_: str=None, need_confirmation : bool=False):
-        '''Add money (inherited method, with stableCoin put at default'''
-        if to_ is None:
-            to_ = self.stableCoin
-        super().add_money(value, to_, need_confirmation)
-
-    def convert_money(self, from_: str, to_: str, value: float, prc_taxes: float=0):
+    def convert_money(self, from_: str, to_: str, value: float) -> bool:
         '''Realise real conversion before adding it to the portfolio'''
-        # Do transaction using Scrapping
-        self.transactioner.convert(from_, to_, value)
-        # Inherite
-        super().convert_money(from_, to_, value, prc_taxes)
+        # Hidden taxes that are contained inside transaction
+        transaction=self.transactioner.convert(from_, to_, value)
+        if transaction.success:
+            # Confirm transaction on Accounts
+            self[from_].add_amount(-transaction.amount_from)
+            self[to_].add_amount(transaction.amount_to)   
+        return transaction.success
+         
 
 if __name__ == '__main__':
     pass
-    # from database import Historic_coinbase_dtb
-    # crypto_study = [d['coinbase_name'] for d in Historic_coinbase_dtb.load_studied_crypto()]
-    # last_prices = {'USDC-USD':1, 'BTC-USD': 30000}
-
-    # Ptf_test = Portfolio(crypto_study)
-    # Ptf_test.update_last_prices(last_prices)
-    # Ptf_test.add_money(50, to_= 'USDC-USD', need_confirmation=False)
-
-    # Ptf_test.convert_money('USDC-USD','BTC-USD', 40, prc_taxes=0.01)
-    # Ptf_test.display()
-
-    # Ptf_test.convert_money('USDC-USD','BTC-USD', 40, prc_taxes=0.01)
-    # Ptf_test.display()
-
-    # Ptf_test.convert_money('BTC-USD','USDC-USD', 50, prc_taxes=0.01)
-    # Ptf_test.display()

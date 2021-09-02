@@ -140,11 +140,6 @@ class TestEnvironmentTrade(unittest.TestCase):
         state, _, _, _ = env.step(np.array([1,0]))
         self.assertIsNone(state)
 
-
-
-  
-
-
 # run the actual unittests
 if __name__ =="__main__":
     unittest.main()

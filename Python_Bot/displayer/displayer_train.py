@@ -3,20 +3,10 @@ import matplotlib.pyplot as plt
 from collections import deque
 
 from displayer.displayer import Displayer
-from rl_lib.agent.manager import Train_perfs
 
-class Displayer_Train_MATPLOTLIB(Displayer):
+class Displayer_RL_Train(Displayer):
 
-    ctr_t: int
-    t: deque
-    epsilons: deque
-    rewards: deque
-    losses: deque
-    min_rew: deque
-    avg_rew: deque
-    max_rew: deque
-
-    def __init__(self, max_deque = 10000, delta_display=1, nb_mean=10):
+    def __init__(self, delta_display=1, nb_mean=10):
         self.nb_sp=3
         self.nb_mean=nb_mean
         self.delta_display = delta_display
@@ -47,7 +37,7 @@ class Displayer_Train_MATPLOTLIB(Displayer):
             for a in self.ax:
                 a.clear()
 
-    def update_stats(self, train_perfs: Train_perfs):
+    def update_stats(self, train_perfs: RL_Train_Perfs:):
         self.epsilons.append(train_perfs.epsilon)
         self.rewards.append(train_perfs.total_reward)
         self.losses.append(train_perfs.total_loss)
@@ -60,7 +50,7 @@ class Displayer_Train_MATPLOTLIB(Displayer):
         self.max_rew.append(max(reward_array[-self.nb_mean:]))
 
 
-    def update(self,train_perfs: Train_perfs):
+    def update(self,train_perfs: RL_Train_Perfs:):
         
         self.reinit_fig()
         self.update_stats(train_perfs)
@@ -114,5 +104,5 @@ if __name__=='__main__':
     for i in range(0,100):
         if i==20:
             d.reset()
-        d.update(Train_perfs(i,i,i))
+        d.update(RL_Train_Perfs:(i,i,i))
     plt.ioff(), plt.show()

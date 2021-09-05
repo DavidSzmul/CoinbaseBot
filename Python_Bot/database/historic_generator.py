@@ -1,10 +1,7 @@
 import pandas as pd
 import numpy as np
 import datetime
-import os
 from abc import ABC, abstractmethod
-from typing import List
-import json
 from datetime import datetime, timedelta
 import urllib
 import requests

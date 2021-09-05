@@ -45,7 +45,10 @@ class RL_Train_Perfs_Historic:
             self.total_rewards_std = deque(maxlen=self.max_deque)
 
     def add(self, perfs: RL_Train_Perfs):
-        self.t.append(self.t[-1]+1)
+        if self.t:
+            self.t.append(self.t[-1]+1)
+        else:
+            self.t.append(0)
         self.total_rewards.append(perfs.total_reward)
         self.total_losses.append(perfs.total_loss)
         self.epsilons.append(perfs.epsilon)
@@ -111,6 +114,7 @@ class Agent_Environment_Manager:
         # End loop
         if self.flag_return_train_perfs:
             perfs=RL_Train_Perfs(total_reward, total_loss, self.agent.epsilon)
+            
         return info, perfs
 
     def loop_episode(self) -> Any:

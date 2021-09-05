@@ -13,11 +13,12 @@ class Environment_Compare_Trading(Environment):
 
     # Memorized input
     current_exp: Experience_Trade
+
     prc_taxes: float
     is_order_random: bool
 
     # Variables
-    current_trade: int
+    idx_current_trade: int=0
     state_shape: np.ndarray
     action_shape: np.ndarray
     order_comparison: List[int]
@@ -35,10 +36,10 @@ class Environment_Compare_Trading(Environment):
 
     def _reset_order_comparison(self):
         '''Create the order to check all trades'''
-        if self.current_trade is None or self.current_trade>=self.nb_trade or self.current_trade<0:
+        if self.idx_current_trade is None or self.idx_current_trade>=self.nb_trade or self.idx_current_trade<0:
             raise ValueError('current_trade parameter shall be contained in [0, nb_trade-1]')
         
-        self.order_comparison = [c for c in range(self.nb_trade) if c != self.current_trade]
+        self.order_comparison = [c for c in range(self.nb_trade) if c != self.idx_current_trade]
         self.ctr_comparison = 0
         if self.is_order_random:
             random.shuffle(self.order_comparison)
@@ -47,7 +48,7 @@ class Environment_Compare_Trading(Environment):
         return self.order_comparison[self.ctr_comparison]
 
     def _get_trades_compared(self) -> Tuple:
-        return (self.current_trade, self._get_trade_to_compare())
+        return (self.idx_current_trade, self._get_trade_to_compare())
 
     def _generate_state(self):
         '''Generation of state depending on environment
@@ -68,18 +69,17 @@ class Environment_Compare_Trading(Environment):
         return pow(-1,flag_change_trade) * (evolution[trades_2_compare[0]] - evolution[trades_2_compare[1]]) - self.has_taxes*self.prc_taxes*flag_change_trade
 
     def get_current_trade(self):
-        return self.current_trade
+        return self.idx_current_trade
 
-    def reset(self, current_exp: Experience_Trade):
-        '''Reset environment -> Corresponds to a new timing to compare all trades'''
+    def reset(self, exp: Experience_Trade, idx_current_trade: int=None):
+        '''Reset environment -> Corresponds to a new timing to compare all trades
+        If idx_current_trade is defined, reset '''
+        if idx_current_trade is not None:
+            self.idx_current_trade = idx_current_trade
 
-        if current_exp is None:
-            raise ValueError('current_exp shall not be None')
-
-        self.current_exp = current_exp
-        self.nb_trade = current_exp.state.shape[1]
-        self.current_trade = current_exp.current_trade
-        self.has_taxes = True       # While no trade has been exchanged, taxes are to be included
+        self.current_exp = exp
+        self.nb_trade = exp.state.shape[1]
+        self.has_taxes = True  # While no trade has been exchanged, taxes are to be included
         self._reset_order_comparison()
         return self._generate_state()
 
@@ -94,7 +94,7 @@ class Environment_Compare_Trading(Environment):
         # Update internal variables depending on action
         if flag_change_trade:
             self.has_taxes=False
-            self.current_trade = self._get_trade_to_compare()
+            self.idx_current_trade = self._get_trade_to_compare()
         
         # Verify if environment has checked all trades
         self.ctr_comparison+=1
@@ -105,8 +105,12 @@ class Environment_Compare_Trading(Environment):
         if not done:
             next_state = self._generate_state()
 
-        # Other infos
+        # Other informations used by the manager (or parent classes)
+        # Important informations after each choice of trades are:
+        # - The current value of trades
         info = None
         if done:
-            info = {'current_trade': self.current_trade}
+            info = {
+                    'idx_chosen_trade': self.idx_current_trade,
+                }
         return next_state, reward, done, info

@@ -6,8 +6,7 @@ from typing import List
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from enum import Enum
-
-
+    
 class Scaler_Trade:
 
     default_scaler: StandardScaler
@@ -131,30 +130,68 @@ class Experience_Trade:
     '''Correspond to one timing containing all informations based on trades to use RL
     state           -> normalized historic of trades
     evolution       -> future evolution of trades (used for reward)
-    current_trade   -> Current value of trades
+    current_trades   -> Current value of trades
     '''
     state: np.ndarray
     evolution: np.ndarray
-    current_trade: pd.DataFrame
+    current_trades: pd.DataFrame    
 
-@dataclass
+class Mode_Algo(Enum):
+    train = 1
+    test = 2
+    real_time = 3
+
 class Generator_Trade:
-    '''Class that enables to generate Train/Test database especially for trades'''
+    '''Class that enables to generate Train/Test database especially for trades
+    This generator is like an iterator'''
 
-    verbose: bool=False
+    mode: Mode_Algo=None
+    scaler: Scaler_Trade
+    ctr_train_test: int
+    end_of_mode: bool
 
-    def _normalize_experiences(self, experiences: List[Experience_Trade], scaler: Scaler_Trade):
-        for idx, exp in enumerate(experiences):
-            experiences[idx].state, _ = scaler.transform(exp.state)
+    def __init__(self, mode: Mode_Algo, scaler: Scaler_Trade):
+        self.set_mode(mode)
+        self.scaler = scaler
+
+    def set_mode(self, mode: Mode_Algo):
+        self.mode = mode
+        self.end_of_mode = False
+        self.ctr_train_test = 0
+
+    def get_size_historic(self):
+        return len(self.scaler.get_idx_window_historic())
+
+    def get_new_experience(self):
+        if self.mode == Mode_Algo.train: # TRAIN
+            experience = self.experiences_train[self.ctr_train_test]
+            self.ctr_train_test+=1
+            self.end_of_mode = self.ctr_train_test>=len(self.experiences_train)
+
+        elif self.mode == Mode_Algo.test:  # TEST
+            experience = self.experiences_test[self.ctr_train_test]
+            self.ctr_train_test+=1
+            self.end_of_mode = self.ctr_train_test>=len(self.experiences_test)
+
+        elif self.mode == Mode_Algo.real_time: # REAL-TIME
+            # TODO: Call method of scrapping to get trades
+            experience = None
+            self.end_of_mode = False
+
+        # Normalize state
+        experience.state, _ = self.scaler.transform(experience.state)
+        return experience
+
+    def is_generator_finished(self):
+        return self.end_of_mode
 
     def _get_synchronous_experiences(self, historic_trades: pd.DataFrame,
-                                scaler: Scaler_Trade,
                                 evolution_meth: Evolution_Trade=None) -> List[Experience_Trade]:
         '''Generate synchronous experiences based on duration of past and future used for input/evolution'''
 
         # Initialization
         experiences = []
-        idx_window = scaler.get_idx_window_historic()
+        idx_window = self.scaler.get_idx_window_historic()
         min_index_research = -idx_window[0]+1
         arr_trades = historic_trades.to_numpy()
 
@@ -181,12 +218,9 @@ class Generator_Trade:
             current_trade = historic_trades.iloc[[idx_present]]
             experiences.append(Experience_Trade(state, evolution, current_trade))
 
-        # Normalize experiences
-        self._normalize_experiences(experiences, scaler)
         return experiences
 
     def _get_unsynchronous_experiences(self, historic_trades: np.ndarray, nb_experience: int,
-                                        scaler: Scaler_Trade,
                                         evolution_meth: Evolution_Trade=None) -> List[Experience_Trade]:
         '''Generate unsynchronous experiences (different trades on different timings to augment database. Only for train)'''
         
@@ -194,7 +228,7 @@ class Generator_Trade:
         if nb_experience == 0:
             return None
         experiences = []
-        idx_window = scaler.get_idx_window_historic()
+        idx_window = self.scaler.get_idx_window_historic()
         min_index_research = -idx_window[0]+1
         
         arr_trades = historic_trades.to_numpy()
@@ -227,12 +261,9 @@ class Generator_Trade:
             current_trade = None # Useless for unsynchrnous experiences
             experiences.append(Experience_Trade(state, evolution, current_trade))
 
-        # Normalize experiences
-        self._normalize_experiences(experiences, scaler)
         return experiences
 
     def generate_train_test_database(self, historic_trades: pd.DataFrame,
-                                        scaler: Scaler_Trade,
                                         evolution_method: Evolution_Trade,
                                         ratio_unsynchrnous_time: float=0.66, 
                                         ratio_train_test: float=0.8
@@ -244,9 +275,6 @@ class Generator_Trade:
         self.nb_cryptos = len(self.cryptos_name)
 
         # CUT TRAIN/TEST DTB
-        if self.verbose:
-            print('Generation of train/test database...')
-
         size_dtb = len(historic_trades.index)        
         idx_cut_train_test = int(ratio_train_test*size_dtb)
         train_arr = historic_trades[:idx_cut_train_test]
@@ -255,14 +283,12 @@ class Generator_Trade:
         # Generate Train Database
         ## Synchronous
         exp_sync_train = self._get_synchronous_experiences(train_arr, 
-                                    scaler,
                                     evolution_meth=evolution_method
                                     )
         ## Unsynchronous
         len_synchronized_train = len(exp_sync_train)
         nb_train_asynchronous = int(len_synchronized_train/ratio_unsynchrnous_time)
         exp_unsync_train = self._get_unsynchronous_experiences(train_arr, nb_train_asynchronous,
-                                    scaler,
                                     evolution_meth=evolution_method
                                     )
         experiences_train = exp_sync_train + exp_unsync_train
@@ -270,18 +296,7 @@ class Generator_Trade:
 
         ### Generate Test Database
         experiences_test = self._get_synchronous_experiences(test_arr, 
-                                    scaler,
                                     evolution_meth=None # No need to get evolution for test
                                     )        
-        
-        if self.verbose:
-            print('Train/test database generated')
-        return experiences_train, experiences_test
-
-
-class Mode_Algo(Enum):
-    '''Mode to use in order to define way to use classes'''
-    train = 1
-    test = 2
-    real_time = 3
-
+        self.experiences_train = experiences_train # No shuffle in order to do a simulation of reality
+        self.experiences_test = experiences_test

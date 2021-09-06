@@ -41,7 +41,7 @@ class Environment_Compare_Trading(Environment):
         '''Set new experience of trade'''
         self.experience_trade = experience_trade
         self.nb_trade = self.experience_trade.state.shape[1]
-        self._update_order_comparison(self.nb_trade, self.experience_trade.current_trade)
+        self._update_order_comparison(self.nb_trade, self.experience_trade.current_trades)
         self.has_taxes = True # While no trade has been exchanged, taxes are to be included
 
     def _update_order_comparison(self, nb_trade: int, current_trade: int):
@@ -52,7 +52,7 @@ class Environment_Compare_Trading(Environment):
         random.shuffle(self.order_comparison)
 
     def get_current_trade(self):
-        return self.experience_trade.current_trade
+        return self.experience_trade.current_trades
     
     def get_trade_to_compare(self):
         return self.order_comparison[self.ctr_comparison]
@@ -70,7 +70,7 @@ class Environment_Compare_Trading(Environment):
         # Generate State-> [Historic of crypto currently chosen, 
         #                   Historic of crypto possibly better,
         #                   Percentage of taxes to be included]
-        trades_2_compare = (self.experience_trade.current_trade, self._update_trade_to_compare())
+        trades_2_compare = (self.experience_trade.current_trades, self._update_trade_to_compare())
         state_trades = self.experience_trade.state[:,trades_2_compare]
         self.state = np.hstack((state_trades.T.flatten(), [self.has_taxes*self.prc_taxes/STD_TAXE]))
         return self.state
@@ -86,14 +86,14 @@ class Environment_Compare_Trading(Environment):
 
         # Initialization
         self.verify_action_shape(action)
-        trades_2_compare =(self.experience_trade.current_trade, self.get_trade_to_compare())
+        trades_2_compare =(self.experience_trade.current_trades, self.get_trade_to_compare())
         flag_change_trade = (action[0]>0)           
         reward = self._get_reward(self.experience_trade.evolution, trades_2_compare, flag_change_trade)
         
         # Update internal variables depending on action
         if flag_change_trade:
             self.has_taxes=False
-            self.experience_trade.current_trade = self.get_trade_to_compare()
+            self.experience_trade.current_trades = self.get_trade_to_compare()
 
         # Generate New State-> [Historic of crypto currently chosen, 
         #                   Historic of crypto possibly better,

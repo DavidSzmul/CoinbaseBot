@@ -1,33 +1,36 @@
 ### Algorithm of choice of crypto using DQN Reinforcement Learning Algo
 ### Model can be continuously improved by generating augmented database
-from enum import Enum
 from typing import Callable
 import numpy as np
 import random
 
-from rl_lib.environment.environment import Environment
-from rl_lib.agent.agent import Agent
 from rl_lib.agent.dqn import DQN_Agent, DQN_parameters
+from rl_lib.manager.manager import Agent_Environment_Manager, RL_Train_Perfs_Historic
+
+from algorithms.lib_trade.processing_trade import Mode_Algo
+from algorithms.lib_trade.environment_trade import Environment_Compare_Trading
+
 from displayer.displayer import Displayer
 
 
-class Mode_Algo(Enum):
-    train = 1
-    test = 2
-    real_time = 3
 
-class Historic_Executor(Executor):
+class AlgoOneTrade_Manager_Factory(Agent_Environment_Manager):
     '''Class communicating with Environment to automatically give the right input to environment
-    according to the mode'''
+    according to the mode
+    TODO: Class needs to manage the save load of model Agent easily'''
 
-    historic: np.ndarray
-    trades_names: List[str]
-    mode: Mode_Algo
-    nb_time: int
-    nb_trade: int
-    ctr_trade: int
-    __loop: Callable
+    PRC_TAXES: float=0.02
+    
+    def __init__(self, size_historic: int):
+        # Definition of environment
+        env = Environment_Compare_Trading(size_historic, self.PRC_TAXES, is_order_random=True)
+        # Definition of agent
+        agent = DQN_Agent(env.get_state_shape(), env.get_action_shape(), 
+                            params=DQN_parameters(gamma=0.99,)
+                        )
+        Agent_Environment_Manager.__init__(self, agent, env, flag_return_train_perfs=True)
 
+class AlgoOneTrade_Main:
     def __init__(self):
         super().__init__()
 

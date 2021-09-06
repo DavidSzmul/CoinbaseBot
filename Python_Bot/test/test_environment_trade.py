@@ -37,7 +37,7 @@ class TestEnvironmentTrade(unittest.TestCase):
         env = Environment_Compare_Trading(size_historic, prc_tax, is_order_random=False)
 
         # Verification
-        env.current_trade = 1
+        env.idx_current_trade = 1
         env.nb_trade = 4
         env._reset_order_comparison()
         self.assertTrue(np.all(env.order_comparison == [0,2,3]))
@@ -55,11 +55,11 @@ class TestEnvironmentTrade(unittest.TestCase):
             [0,1,2,3,4],
         ])
         # Verification
-        self.assertTrue(np.all(env.reset(Experience_Trade(state_exp, None, 1)
+        self.assertTrue(np.all(env.reset(Experience_Trade(state_exp, None, None), 1
                                         )==np.array([1,1,1,0,0,0,1])))
-        self.assertTrue(np.all(env.reset(Experience_Trade(state_exp+1, None, 1)
+        self.assertTrue(np.all(env.reset(Experience_Trade(state_exp+1, None, None), 1
                                         )==np.array([2,2,2,1,1,1,1])))
-        self.assertTrue(np.all(env.reset(Experience_Trade(state_exp, None, 0)
+        self.assertTrue(np.all(env.reset(Experience_Trade(state_exp, None, None), 0
                                         )==np.array([0,0,0,1,1,1,1])))
 
     def test_step_doneOk(self):
@@ -69,16 +69,16 @@ class TestEnvironmentTrade(unittest.TestCase):
         env = Environment_Compare_Trading(size_historic, prc_tax, is_order_random=False)
 
         # Define simple experience
-        current_trade = 2
+        idx_current_trade = 2
         state_exp = np.array([
             [0,1,2,3],
             [0,1,2,3],
             [0,1,2,3],
         ])
-        exp = Experience_Trade(state_exp, None, current_trade)
+        exp = Experience_Trade(state_exp, None, None)
         
         # Verification
-        _ = env.reset(exp)
+        _ = env.reset(exp, idx_current_trade)
         _, _, done, _ = env.step(np.array([1,0]))
         self.assertFalse(done)
         _, _, done, _ = env.step(np.array([0, 1]))
@@ -86,7 +86,7 @@ class TestEnvironmentTrade(unittest.TestCase):
         ## End of env
         _, _, done, info = env.step(np.array([1,0]))
         self.assertTrue(done)
-        self.assertEqual(info['current_trade'], 1)
+        self.assertEqual(info['idx_chosen_trade'], 1)
 
     def test_step_actionEffectOnTax(self):
         # Initialization
@@ -101,10 +101,10 @@ class TestEnvironmentTrade(unittest.TestCase):
             [0,1,2,3,4],
             [0,1,2,3,4],
         ])
-        exp = Experience_Trade(state_exp, None, current_trade)
+        exp = Experience_Trade(state_exp, None, None)
         
         # Verification
-        _ = env.reset(exp)
+        _ = env.reset(exp, current_trade)
         state, _, _, _ = env.step(np.array([1,0]))
         self.assertTrue(env.has_taxes)
         _, _, _, _ = env.step(np.array([1,0]))
@@ -121,15 +121,15 @@ class TestEnvironmentTrade(unittest.TestCase):
         env = Environment_Compare_Trading(size_historic, prc_tax, is_order_random=False)
 
         # Define simple experience
-        current_trade = 1
+        idx_current_trade = 1
         state_exp = np.array([
             [0,1,2,3,4],
             [0,1,2,3,4],
         ])
-        exp = Experience_Trade(state_exp, None, current_trade)
+        exp = Experience_Trade(state_exp, None, None)
         
         # Verification
-        state = env.reset(exp)
+        state = env.reset(exp, idx_current_trade)
         self.assertTrue(np.all(state == np.array([1,1,0,0,1])))
         state, _, _, _ = env.step(np.array([1,0]))
         self.assertTrue(np.all(state == np.array([1,1,2,2,1])))

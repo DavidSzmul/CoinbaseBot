@@ -18,7 +18,8 @@ The solution is to use scrapping again to reproduce mouse and keyboard on browse
 
 ## Front-End
 Once the Bot library is done (Back-End), the idea would be to integrate an IHM to visualize Bot behavior (train/test/real-time).
-This could be done using Tkinter or Qt, but it is prefered to realize it as a Front-End App using HTML/CSS/JS 
+This is firstly done using Tkinter + Matplotlib libraries.
+For perspectives, this could be implemented using a Client-Server App with a Front-End done in HTML/JS (preffered framework would be Vue)
 
 
 

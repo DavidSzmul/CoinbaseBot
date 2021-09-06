@@ -85,8 +85,7 @@ class DQN_Agent(Agent):
         return NetworkGenerator().create_DQN_Model(self.state_shape, self.action_shape, 
                                 layers=layers_model, learning_rate=self.params.learning_rate)
 
-
-    def save_weights(self, filepath, overwrite=False):
+    def save_model(self, filepath, overwrite=False):
         keras.models.save_model(self.model, filepath, overwrite=overwrite)
 
     def _clip_reward(self, reward: float) -> float:

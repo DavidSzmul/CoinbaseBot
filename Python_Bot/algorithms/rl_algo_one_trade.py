@@ -1,17 +1,16 @@
 ### Algorithm of choice of crypto using DQN Reinforcement Learning Algo
 ### Model can be continuously improved by generating augmented database
-from typing import Callable
-import numpy as np
-import random
+from typing import List
 
 from rl_lib.agent.dqn import DQN_Agent, DQN_parameters
-from rl_lib.manager.manager import Agent_Environment_Manager, RL_Train_Perfs_Historic
+from rl_lib.manager.manager import Agent_Environment_Manager
 
-from algorithms.lib_trade.processing_trade import Mode_Algo
+from algorithms.lib_trade.processing_trade import Generator_Trade, Mode_Algo, Scaler_Trade
 from algorithms.lib_trade.environment_trade import Environment_Compare_Trading
+from algorithms.lib_trade.portfolio import Portfolio
+from algorithms.ihm_trade.ihm_trade import StatusLoop
 
-from displayer.displayer import Displayer
-
+from displayer.displayer_rl_train import Displayer_RL_Train
 
 
 class AlgoOneTrade_Manager_Factory(Agent_Environment_Manager):
@@ -20,252 +19,101 @@ class AlgoOneTrade_Manager_Factory(Agent_Environment_Manager):
     TODO: Class needs to manage the save load of model Agent easily'''
 
     PRC_TAXES: float=0.02
+    path_save_model: str
+    scaler: Scaler_Trade
+    generator: Generator_Trade
+    env: Environment_Compare_Trading
     
-    def __init__(self, size_historic: int):
+    def __init__(self, nb_min_historic: List[int], nb_iteration_historic: List[int], 
+                    path_load_model: str=None, path_save_model: str=None,
+                    displayer_train: Displayer_RL_Train=None, displayer_test=None, displayer_rt=None
+                    ):
+        # Initialization
+        self.path_save_model = path_save_model
+        self.displayer_train = displayer_train
+
+        ### Params changable by the user (to create new model)
+        LAYERS_MODEL = [128,64]
+
+        # Definition of scaler for preprocessing and generating historic of trades
+        self.scaler = Scaler_Trade(nb_min_historic, nb_iteration_historic)
+        # Need to fit scaler based on previously saved trade historic
+
+
+        # Definition of generator of experiences
+        self.generator = Generator_Trade(Mode_Algo.train, self.scaler)
+
         # Definition of environment
-        env = Environment_Compare_Trading(size_historic, self.PRC_TAXES, is_order_random=True)
+        env = Environment_Compare_Trading(self.generator.get_size_historic(), self.PRC_TAXES, is_order_random=True)
         # Definition of agent
         agent = DQN_Agent(env.get_state_shape(), env.get_action_shape(), 
-                            params=DQN_parameters(gamma=0.99,)
+                            params=DQN_parameters(gamma=0.99,), #Definition of all parameters intresect to DQN (independant to model NN)
+                        name_model=path_load_model, # Load existing model if not None
+                        layers_model=LAYERS_MODEL
                         )
         Agent_Environment_Manager.__init__(self, agent, env, flag_return_train_perfs=True)
 
-class AlgoOneTrade_Main:
-    def __init__(self):
-        super().__init__()
+    def set_mode(self, mode: Mode_Algo):
+        self.generator.set_mode(mode)
 
-    def _reset(self, current_trade: int, experiences: List[Experience_Trade], trades_name: List[str]):
-        self.current_trade = current_trade
-        self.trades_names = trades_name
+    def save_model(self, filepath, overwrite=False):
+        self.agent.save_model(self.path_save_model, overwrite=True)
 
-        self.nb_time = len(experiences)
-        self.nb_trade = 0
-        if experiences is not None:
-            self.nb_trade = np.shape(experiences[0].historic)[1]
-        self.ctr_trade = 0
+    def run(self, status_loop: StatusLoop):
+        if self.generator.get_mode == Mode_Algo.train:
+            self.run_training(status_loop)
+        elif self.generator.get_mode == Mode_Algo.test:
+            self.run_testing(status_loop)
+        elif self.generator.get_mode == Mode_Algo.real_time:
+            self.run_real_time(status_loop)
 
-    def start(self, agent: Agent, env: Environment_Compare_Trading,
-            mode: Mode_Algo, current_trade: int, trades_name: List[str],
-            experiences: List[Experience_Trade]=None,
-            portfolio: Portfolio=None,
-            displayer: Displayer=None):
-        '''Start Loop of Train/Test/RT'''
+    def run_training(self, status_loop: StatusLoop):
+        self.env.idx_current_trade = 0
+        while (status_loop.is_running and not self.generator.is_generator_finished()):
+            #Generate new experience on environment
+            self.env.set_new_episode(self.generator.get_new_experience()) 
+            # Start new experience/episode
+            _, perfs = self.loop_episode_train()
 
-        self._reset(current_trade, experiences, trades_name)
-        switcher = {
-            Mode_Algo.train: self.start_train,
-            Mode_Algo.test: self.start_test,
-            Mode_Algo.real_time: self.start_real_time,
-        }
-        self.__loop = switcher[mode]
-        self.__loop(agent, env, experiences, portfolio, displayer) # Run appropriate mode
+            # Display performances if enabled
+            if self.displayer_train:
+                self.displayer_train.update(perfs)
 
-    def get_exchanged_var_env_TrainTest(self, experiences: List[Experience_Trade],
-            idx_time: int, current_trade: int):
-        '''Generate Exchanged variable for environment for Train/Test'''
+    def run_testing(self, status_loop: StatusLoop):
+        # Create a new portfolio based on generator
+        portfolio = Portfolio()
+        previous_idx_current_trade = 0
+        self.env.idx_current_trade = previous_idx_current_trade
+        init_money = True
+        while (status_loop.is_running and not self.generator.is_generator_finished()):
 
-        excanged_var = Exchanged_Var_Environment_Trading(
-            historic = experiences[idx_time].historic,
-            next_value = experiences[idx_time].next_value,
-            evolution = experiences[idx_time].evolution,
-            current_trade = current_trade,
-            )
-        return excanged_var
-
-    def start_train(self, agent: Agent, env: Environment_Compare_Trading,
-                        experiences: List[Experience_Trade], portfolio: Portfolio,
-                        displayer: Displayer):
-
-        '''Loop for training Agent'''
-        for i_time in range(self.nb_time): # For each Time
-            # Select random current_trade
-            self.current_trade = random.choice(list(range(self.nb_trade)))
-            # Update Exchanged Variables for environment
-            exchanged_var = self.get_exchanged_var_env_TrainTest(experiences, self.current_trade, i_time)
-            # Update Environment to set new states
-            env.set_newTime_on_Env(exchanged_var)
-
-            for _ in range(self.nb_trade-1): # For each crypto
-                # Reset Environment (compare with another trade)
-                env.reset()
-                # Train Agent
-                self.train_cycle(agent, env)
-            
-            # Add displayer to check performances
-            if displayer is not None:
-                displayer.update(exchanged_var, self.train_perfs)
-
-    def start_test(self, agent: Agent, env: Environment_Compare_Trading, 
-                    experiences: List[Experience_Trade], portfolio: Portfolio,
-                    displayer: Displayer):
-        '''Loop for testing Agent'''
-
-        if self.current_trade is None:
-            raise ValueError('"current_trade" can''t be None during test phase')
-
-        for i_time in range(self.nb_time): # For each Time
-            # Update Exchanged Variables for environment
-            exchanged_var = self.get_exchanged_var_env_TrainTest(experiences, self.current_trade, i_time)
-            # Update Environment to set new states
-            env.set_newTime_on_Env(exchanged_var)
-            
-            for _ in range(self.nb_trade-1): # For each crypto
-                # Reset Environment (compare with another trade)
-                env.reset()
-                # Execute Agent
-                self.execute_cycle(agent, env)
-            # Determine new current trade
-            previous_trade = self.current_trade
-            self.current_trade = env.get_current_trade()
-            
-            # Update portfolio values
-            last_prices = {}
-            for i,name in enumerate(self.trades_names):
-                last_prices[name] = exchanged_var.historic[-1, i]
+            #Update environment and porfolio
+            self.env.set_new_episode(self.generator.get_new_experience()) 
+            last_prices = self.env.current_exp.current_trades
+            trades_names = last_prices.columns
+            idx_current_trade = self.env.get_current_trade()
             portfolio.update_last_prices(last_prices)
 
-            # Update portfolio if current_trade has changed
-            if self.current_trade is not previous_trade:
-                trade_from = self.trades_names[previous_trade]
-                trade_to = self.trades_names[self.current_trade]
-                value_convert = portfolio.get_value(trade_from)
-                portfolio.convert_money(trade_from, trade_to, value_convert)
+            # Add artificially money for the initialization
+            if init_money:
+                portfolio.add_money(to_=trades_names[idx_current_trade], value=1000)
+                init_money=False
 
-            # Add displayer to check performances
-            if displayer is not None:
-                displayer.update(exchanged_var, portfolio)
-
-
-
-    def start_real_time(self, agent: Agent, env: Environment_Compare_Trading,
-                            experiences: List[Experience_Trade], portfolio: Portfolio,
-                            displayer: Displayer):
-        '''Loop for executing in real-Time the association Agent+Env'''
-        
-        if self.current_trade is None:
-            raise ValueError('"current_trade" can''t be None during real-time phase')
-
-        ### Can only be finished by user
-        finished = False
-        while (not finished): # For each Time
+            # Start new experience/episode
+            info = self.loop_episode()
             
-            ### Get real-time values of trades (wait include)
-            ### Update Environment to set new states
-            self.update_environment_realtime(env, self.current_trade)
+            # Realize conversion depending on agent decision
+            if idx_current_trade is not previous_idx_current_trade:
+                
+                trade_from = trades_names[previous_idx_current_trade] 
+                trade_to = trades_names[idx_current_trade]
+                value_convert = portfolio.get_value(trade_from)
+                portfolio.convert_money(trade_from, trade_to, value_convert, prc_taxes=self.PRC_TAXES)
 
-            for j in range(self.nb_trade-1):
-                # Reset Environment (compare with another trade)
-                env.reset()
-                ### Test Agent
-                self.execute_cycle(agent, env)
-            ### Determine new current trade
-            self.current_trade = env.get_current_trade()
+            # Display performances if enabled
+            if self.displayer_test:
+                # self.displayer_train.update(perfs)
 
-            # Add displayer to check performances
-            if displayer is not None:
-                exchanged_var=None
-                finished = displayer.update(exchanged_var)
-
-
-class Main_RL_Trade_Algo:
-    '''Class containing and interacting with all objects to create the algorithm'''
-    mode: Mode_Algo=None
-    env: Environment
-    agent: Agent
-    generator: Train_Test_Generator_Trade
-    executor: Historic_Executor
-    portfolio: Portfolio
-    displayer: Displayer
-
-    train_experience: List[Experience_Trade]
-    test_experience: List[Experience_Trade]
-    current_experience: List[Experience_Trade]
-
-    crypto_names: List[str]
-    crypto_historic: DataFrame
-
-    # Properites of environment
-    duration_past: int
-    duration_future: int
-    prc_taxes: float
-
-    def __init__(self, model_path=None):
-        
-        # Determine Cryptos studied
-        self.crypto_historic = Historic_coinbase_dtb.load(Historic_coinbase_dtb.Resolution_Historic.min)
-        self.crypto_names = [str(c) for c in self.crypto_historic.columns]
-
-        # Create Generator of database/preprocessing
-        self.generator = Train_Test_Generator_Trade(self.crypto_historic, verbose=True)
-
-        # Define Environment
-        print('Creation of Environment...')
-        self.duration_past = 180
-        self.duration_future = 60
-        self.prc_taxes = 0.01
-        state_shape = np.array([self.duration_past,len(self.crypto_names)])
-        self.env = Environment_Compare_Trading(state_shape,self.prc_taxes)
-        action_shape = self.env.get_action_shape()
-
-        # Define Agent
-        print('Creation of Agent...')
-        params = DQN_parameters()
-        layers_NN = [64, 32]
-        self.agent = DQN_Agent(state_shape, action_shape, layers_model=layers_NN,
-                                name_model=model_path)
-        #Create Executor for Train/Test/RT
-        self.executor = Historic_Executor()
-
-    def _evolution_method(self, future_values: np.ndarray):
-        '''Definition of evolution of cryptocurrencies in order to determine reward:
-            Because Reinforcement Learning enables to the Bot to determine rewards based on future rewards (Q-value with DQN),
-            it is possible to estimate a relatively simple evolution used for reward'''
-        # First idea consists in giving a median of future increases
-        return np.median(future_values - future_values[:,0], axis=1)
-
-    def reset_mode(self, mode: Mode_Algo):
-        # Check if a new train/test database needs to be regenerated
-        previous_mode = self.mode
-        mode_needing_dtb = [Mode_Algo.train, Mode_Algo.test]    
-        flag_regenerate = (mode in mode_needing_dtb) and (previous_mode not in mode_needing_dtb)
-
-        if flag_regenerate:
-            self.train_experience, self.test_experience = self.generator.generate_train_test_database(
-                                            self, self.crypto_historic,
-                                            self.duration_past, self.duration_future,
-                                            evolution_method=self._evolution_method,
-                                            verbose=True)
-        self.mode = mode
-        
-        # Set current experiences to appropriate mode (no memory added because it acts as a pointer)
-        if self.mode == Mode_Algo.train:
-            self.current_experience = self.train_experience
-        elif mode == Mode_Algo.test:
-            self.current_experience = self.test_experience
-        else:
-            self.current_experience = None
-
-    def execute(self, mode, initial_amount=0):
-
-        # Reset mode if necessary
-        self.reset_mode(mode)
-
-        STABLECOIN_NAME = 'USDC-USD'
-        self.portfolio = Portfolio(self.crypto_names)
-        self.portfolio.add_money(initial_amount, STABLECOIN_NAME, need_confirmation=False)
-        current_crypto = self.crypto_names.index(STABLECOIN_NAME)
-        displayer = None
-
-        self.executor.start(self.agent, self.env,
-                            self.mode, current_crypto, self.crypto_names,
-                            self.current_experience, self.portfolio,
-                            displayer)
-
-    def save_model(self,path: str):
-        self.agent.save_weights(path,overwrite=True)
-
-        
-        
 
 if __name__ == '__main__':
     main = Main_RL_Trade_Algo(model_path=None)

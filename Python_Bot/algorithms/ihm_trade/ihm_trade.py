@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
+from dataclasses import dataclass
 
 from abc import ABC, abstractmethod
 from tkinter.font import Font
@@ -12,25 +13,45 @@ import threading
 from algorithms.lib_trade.processing_trade import Mode_Algo
 import config
 
-class Model_MVC_Trade:
+@dataclass
+class StatusLoop:
     is_running: bool = False
+
+class Abstract_RL_Train_Runner:
+    '''Simulation of more complex application'''
     mode: Mode_Algo
+
     def __init__(self):
         self.mode = Mode_Algo.train
+        
+    def set_mode(self, mode: Mode_Algo):
+        self.mode = mode
 
-    def run(self):
-        self.is_running = True
+    def run(self, status_loop: StatusLoop):
         ctr=0
-        while self.is_running:
+        while status_loop.is_running:
             ctr+=1
             print(self.mode, ctr)
             time.sleep(1)
 
+
+class Model_MVC_Trade:
+    status_loop: StatusLoop
+
+    mode: Mode_Algo
+    def __init__(self, runner):
+        self.runner = runner
+        self.status_loop = StatusLoop()
+
+    def run(self):
+        self.status_loop.is_running = True
+        self.runner.run(self.status_loop)
+
     def set_mode(self, mode):
-        self.mode = mode
+        self.runner.set_mode(mode)
 
     def stop(self):
-        self.is_running = False
+        self.status_loop.is_running = False
 
 
 class Controller_MVC_Trade:
@@ -51,7 +72,6 @@ class Controller_MVC_Trade:
             self.model.set_mode(Mode_Algo.test)
         elif mode_int==3:
             self.model.set_mode(Mode_Algo.real_time)
-        print('Set', self.model.mode)
 
     def get_list_env(self):
         return [d['name'] for d in self.list_Historic_Environement]
@@ -106,7 +126,7 @@ class Controller_MVC_Trade:
         self.view.edit_agent_save.insert(0, file_user)
 
     def handle_runstop(self):
-        if self.model.is_running:
+        if self.model.status_loop.is_running:
             self.model.stop()
             self.view.btn_run['text'] = 'Run'
             self.view.frame_params.pack()
@@ -154,7 +174,7 @@ class TkView_MVC_Trade(View):
         frame = self.frame_env
         self.label_env = tk.Label(frame, text="Environement -> Definition historic:")
         self.label_env.pack()
-        self.lb_env = ttk.Combobox(frame, values=controller.get_list_env(), state='readonly', width=100)
+        self.lb_env = ttk.Combobox(frame, values=controller.get_list_env(), state='readonly', width=50)
         self.lb_env.pack(fill=tk.X, ipadx=5)
         self.lb_env.current(0)
         self.lb_env.bind("<<ComboboxSelected>>", controller.handle_click_list_env)
@@ -208,10 +228,11 @@ class TkView_MVC_Trade(View):
         # Frames to organize ihm
         self.frame_params = tk.Frame(self.frame)
         self.frame_params.pack(side=tk.TOP)
-        self.frame_mode = tk.Frame(self.frame_params)
-        self.frame_mode.pack(side=tk.LEFT)
         self.frame_agent_env = tk.Frame(self.frame_params)
-        self.frame_agent_env.pack(side=tk.RIGHT)
+        self.frame_agent_env.pack(side=tk.LEFT)
+        self.frame_mode = tk.Frame(self.frame_params)
+        self.frame_mode.pack(side=tk.RIGHT)
+
         self.frame_env = tk.Frame(self.frame_agent_env)
         self.frame_env.pack(side=tk.TOP)
         self.frame_agent = tk.Frame(self.frame_agent_env)
@@ -219,9 +240,10 @@ class TkView_MVC_Trade(View):
         self.frame_run = tk.Frame(self.frame)
         self.frame_run.pack(side=tk.TOP)
 
-        self._setup_mode(controller)
+        
         self._setup_env(controller)
         self._setup_agent(controller)
+        self._setup_mode(controller)
         self._setup_runstop(controller)
 
     
@@ -243,5 +265,9 @@ if __name__=="__main__":
         'nb_cycle_historic': [15, 15, 15, 15],
         }
     ]
-    c = Controller_MVC_Trade(Model_MVC_Trade(), TkView_MVC_Trade(), list_Historic_Environement)
+
+    runner = Abstract_RL_Train_Runner() # Corresponds to the application to execute
+    model = Model_MVC_Trade(runner) # Corresponds to the model associated to the IHM
+    view = TkView_MVC_Trade() # WIDGETS
+    c = Controller_MVC_Trade(model, view, list_Historic_Environement)
     c.start()

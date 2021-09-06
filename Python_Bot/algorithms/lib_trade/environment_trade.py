@@ -71,14 +71,15 @@ class Environment_Compare_Trading(Environment):
     def get_current_trade(self):
         return self.idx_current_trade
 
-    def reset(self, exp: Experience_Trade, idx_current_trade: int=None):
-        '''Reset environment -> Corresponds to a new timing to compare all trades
-        If idx_current_trade is defined, reset '''
+    def set_new_episode(self, exp: Experience_Trade, idx_current_trade: int=None):
         if idx_current_trade is not None:
-            self.idx_current_trade = idx_current_trade
-
+            self.idx_current_trade = idx_current_trade # Otherwise, keep last kept trade
         self.current_exp = exp
         self.nb_trade = exp.state.shape[1]
+
+    def reset(self):
+        '''Reset environment -> Corresponds to a new timing to compare all trades
+        If idx_current_trade is defined, reset '''      
         self.has_taxes = True  # While no trade has been exchanged, taxes are to be included
         self._reset_order_comparison()
         return self._generate_state()

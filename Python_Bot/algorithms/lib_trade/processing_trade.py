@@ -159,6 +159,9 @@ class Generator_Trade:
         self.end_of_mode = False
         self.ctr_train_test = 0
 
+    def get_mode(self):
+        return self.mode
+
     def get_size_historic(self):
         return len(self.scaler.get_idx_window_historic())
 

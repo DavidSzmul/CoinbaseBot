@@ -112,6 +112,7 @@ class AlgoOneTrade_Manager_Factory(Agent_Environment_Manager):
 
             # Display performances if enabled
             if self.displayer_test:
+                pass
                 # self.displayer_train.update(perfs)
 
 

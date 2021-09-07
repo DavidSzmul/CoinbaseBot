@@ -1,143 +1,199 @@
+from enum import Enum
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
-from dataclasses import dataclass
+from tkinter.font import Font
+from tkinter.filedialog import asksaveasfile
 
 from abc import ABC, abstractmethod
-from tkinter.font import Font
-from typing import List
+from typing import  Any, List
 import time
 import os
 import threading
-
-from algorithms.lib_trade.processing_trade import Mode_Algo
 import config
 
-@dataclass
-class StatusLoop:
-    is_running: bool = False
 
-class Abstract_RL_Train_Runner:
-    '''Simulation of more complex application'''
-    mode: Mode_Algo
+class Abstract_RL_App(ABC):
+    '''Abstraction of App'''
+    is_running: bool=False
 
-    def __init__(self):
-        self.mode = Mode_Algo.train
-        
-    def set_mode(self, mode: Mode_Algo):
-        self.mode = mode
+    @abstractmethod
+    def save_model(self, path:str):
+        '''Save of model agent'''
 
-    def run(self, status_loop: StatusLoop):
-        ctr=0
-        while status_loop.is_running:
-            ctr+=1
-            print(self.mode, ctr)
-            time.sleep(1)
+    @abstractmethod
+    def define_params(self, min_historic: List[int],nb_cycle_historic: List[int], path_agent:str):
+        '''Definition of environment + agent'''
 
+    @abstractmethod
+    def update_train_test_dtb(self):
+        '''Update all properties about database (refresh more recent trade values)'''
 
-class Model_MVC_Trade:
-    status_loop: StatusLoop
+    @abstractmethod
+    def train(self):
+        pass
 
-    mode: Mode_Algo
-    def __init__(self, runner):
-        self.runner = runner
-        self.status_loop = StatusLoop()
-
-    def run(self):
-        self.status_loop.is_running = True
-        self.runner.run(self.status_loop)
-
-    def set_mode(self, mode):
-        self.runner.set_mode(mode)
+    @abstractmethod
+    def test(self):
+        pass
+    
+    # @abstractmethod
+    # def real_time(self):
+    #     pass
 
     def stop(self):
-        self.status_loop.is_running = False
+        self.is_running = False
 
+
+class Easy_RL_App(Abstract_RL_App):
+    '''Simulation of more complex application (for testing)'''
+
+    path_agent: str
+    
+    def _use_thread(self, func, *args):
+        if self.is_running:
+            return
+        self.is_running = True
+        processThread = threading.Thread(target=func, args=args)
+        processThread.start()
+
+    def train(self):
+        self._use_thread(self.train_thread)
+        if self.is_running:
+            return
+
+    def test(self):
+        self._use_thread(self.test_thread)
+        if self.is_running:
+            return
+
+    def update_train_test_dtb(self):
+        print('Database updated: Ready to execute')
+
+    def define_params(self, min_historic: List[int],nb_cycle_historic: List[int], path_agent:str):
+        '''Definition of environment + agent'''
+        print('Params Initialized')
+        self.update_train_test_dtb()
+
+    def train_thread(self):
+        ctr=0
+        while self.is_running:
+            ctr+=1
+            print('Train:', ctr)
+            time.sleep(1)
+
+    def test_thread(self):
+        ctr=0
+        while self.is_running:
+            ctr+=1
+            print('Test:', ctr)
+            time.sleep(0.5)
+
+    def save_model(self, path: str):
+        print('Agent Model Saved\n', path)
+
+class Enum_Frames(Enum):
+    Params_Frame = 1
+    Run_Frame = 2
+    Stop_Frame = 3
 
 class Controller_MVC_Trade:
-    def __init__(self, model: Model_MVC_Trade, view, list_Historic_Environement: List):
+    
+    model: Abstract_RL_App
+    view: Any
+    default_folder: str
+
+    def __init__(self, model: Abstract_RL_App, view, list_Historic_Environement: List):
         self.model = model
         self.view = view
         self.list_Historic_Environement = list_Historic_Environement
     
-    def start(self):
-        self.view.setup(self)
+    def start(self, first_frame: Enum_Frames=Enum_Frames.Params_Frame):
+        self.view.setup(self, first_frame=first_frame)
+        self.update_default_folder()
         self.view.start_main_loop()
-
-    def handle_set_mode(self):
-        mode_int = self.view.mode_int_var.get()
-        if mode_int==1:
-            self.model.set_mode(Mode_Algo.train)
-        elif mode_int==2:
-            self.model.set_mode(Mode_Algo.test)
-        elif mode_int==3:
-            self.model.set_mode(Mode_Algo.real_time)
 
     def get_list_env(self):
         return [d['name'] for d in self.list_Historic_Environement]
 
+    def _set_agent_load_file(self, file: str):
+        self.view.edit_agent_load.configure(state='normal')
+        self.view.edit_agent_load.delete(0,"end")
+        self.view.edit_agent_load.insert(0, file)
+        self.view.edit_agent_load.configure(state='readonly')
+
     def handle_click_list_env(self, event):
         print(self.view.lb_env.get())
+        self.update_default_folder()
+        self._set_agent_load_file('')
 
-    def handle_search_agent_load(self):
-        # Determine Subfoler based on chosen_list
+
+    def update_default_folder(self):
         idx_chosen = self.get_list_env().index(self.view.lb_env.get())
-        folder = os.path.join(config.MODELS_DIR, self.list_Historic_Environement[idx_chosen]['subfolder'])
-        folder = folder.replace('\\','/')
-        
-        if not os.path.exists(folder):
-            os.makedirs(folder)
+        self.default_folder = os.path.join(config.MODELS_DIR, self.list_Historic_Environement[idx_chosen]['subfolder']).replace('\\','/')
+        if not os.path.exists(self.default_folder):
+            os.makedirs(self.default_folder)
 
+    def handle_search_load_agent(self):
         # Choose file on this folder
         file_path = filedialog.askopenfilename(title="Select Model Agent", 
                                                 filetypes=[( "Text File" , ".txt" )],
-                                                initialdir=folder)
-        folder_user, file_user = os.path.split(file_path)
-
-        if file_user=='': # No file chosen
-            self.view.edit_agent_load.delete(0,"end")
-            return
-        if folder_user != folder: # Wrong folder
-            raise AssertionError('You must choose a file on the proposed folder')
-        self.view.edit_agent_load.delete(0,"end")
-        self.view.edit_agent_load.insert(0, file_user)
-
-    def handle_search_agent_save(self):
-        # Determine Subfoler based on chosen_list
-        idx_chosen = self.get_list_env().index(self.view.lb_env.get())
-        folder = os.path.join(config.MODELS_DIR, self.list_Historic_Environement[idx_chosen]['subfolder'])
-        folder = folder.replace('\\','/')
+                                                initialdir=self.default_folder)
         
-        if not os.path.exists(folder):
-            os.makedirs(folder)
-
-        # Choose file on this folder
-        file_path = filedialog.askopenfilename(title="Select Model Agent", 
-                                                filetypes=[( "Text File" , ".txt" )],
-                                                initialdir=folder)
         folder_user, file_user = os.path.split(file_path)
-
-        if file_user=='': # No file chosen
-            self.view.edit_agent_save.delete(0,"end")
-            return
-        if folder_user != folder: # Wrong folder
+        if (folder_user != self.default_folder and file_user !=''): # Wrong folder
+            self._set_agent_load_file('')
             raise AssertionError('You must choose a file on the proposed folder')
-        self.view.edit_agent_save.delete(0,"end")
-        self.view.edit_agent_save.insert(0, file_user)
+        self._set_agent_load_file(file_user)
 
-    def handle_runstop(self):
-        if self.model.status_loop.is_running:
-            self.model.stop()
-            self.view.btn_run['text'] = 'Run'
-            self.view.frame_params.pack()
-            self.view.frame_run.pack_forget()
-            self.view.frame_run.pack()
+    def handle_confirm_params(self):
+        # Environment Definition
+        idx_env_chosen = self.get_list_env().index(self.view.lb_env.get())
+        min_historic = self.list_Historic_Environement[idx_env_chosen]['min_historic']
+        nb_cycle_historic = self.list_Historic_Environement[idx_env_chosen]['nb_cycle_historic']
+
+        # Agent Path
+        file = self.view.edit_agent_load.get()
+        if file == '':
+            path_agent = None
+        else:
+            folder = os.path.join(config.MODELS_DIR, self.list_Historic_Environement[idx_env_chosen]['subfolder'])
+            path_agent = os.path.join(folder, file)
+
+        # Set parameters to app
+        self.model.define_params(min_historic, nb_cycle_historic, path_agent)
+        self.view.set_new_frame(Enum_Frames.Run_Frame, self)
+
+    def handle_update_dtb(self):
+        self.model.update_train_test_dtb()
+
+    def handle_return(self):
+        self.view.set_new_frame(Enum_Frames.Params_Frame, self)
+
+    def handle_train(self):
+        self.model.train()
+        self.view.set_new_frame(Enum_Frames.Stop_Frame, self)
+
+    def handle_test(self):
+        self.model.test()
+        self.view.set_new_frame(Enum_Frames.Stop_Frame, self)
+
+    def handle_save(self):
+        # Determine path of save
+        files = [('Text Document', '*.txt')]
+        res = asksaveasfile(filetypes = files, defaultextension = files, initialdir=self.default_folder)
+        if not res: # Canceling
             return
+        
+        path_user = res.name
+        folder_user, _ = os.path.split(path_user)
+        if (folder_user != self.default_folder): # Wrong folder
+            raise AssertionError('You must determine a file on the proposed folder')
+        self.model.save_model(path_user)
 
-        processThread = threading.Thread(target=self.model.run, args=[])  # <- 1 element list
-        processThread.start()
-        self.view.btn_run['text'] = 'Stop'
-        self.view.frame_params.pack_forget()
+    def handle_stop(self):
+        self.model.stop()
+        self.view.set_new_frame(Enum_Frames.Run_Frame, self)
 
 
 
@@ -152,101 +208,126 @@ class View(ABC):
 
 class TkView_MVC_Trade(View):
 
-    def __init__(self):
-        pass
+    frame: tk.Tk=None
 
-    def _setup_mode(self, controller):
-        frame = self.frame_mode
-        self.label_mode = tk.Label(frame, text="Mode:")
-        self.label_mode.pack()
-        self.mode_int_var = tk.IntVar() 
-        self.mode_int_var.set(1)
-        self.rb_mode = []
-        self.rb_mode.append(tk.Radiobutton(frame, text="Train", variable=self.mode_int_var, value=1, command=controller.handle_set_mode))
-        self.rb_mode.append(tk.Radiobutton(frame, text="Test", variable=self.mode_int_var, value=2, command=controller.handle_set_mode))
-        self.rb_mode.append(tk.Radiobutton(frame, text="Real-Time", variable=self.mode_int_var, value=3, command=controller.handle_set_mode))
-        
-        for rb in self.rb_mode:
-            rb.pack(anchor=tk.W)
+    def set_new_frame(self, enum: Enum_Frames, controller: Controller_MVC_Trade):
 
-    def _setup_env(self, controller):
-        # Env is based on the type of historic chosen
-        frame = self.frame_env
-        self.label_env = tk.Label(frame, text="Environement -> Definition historic:")
+        dict_frame = {
+            Enum_Frames.Params_Frame: self._setup_frame_params,
+            Enum_Frames.Run_Frame: self._setup_run,
+            Enum_Frames.Stop_Frame: self._setup_stop,
+        }
+        if enum not in dict_frame:
+            raise ValueError('enum must be in dictionary')
+        if self.frame is not None:
+            self.frame.destroy()
+        setup_fcn = dict_frame[enum]
+        self.frame = setup_fcn(self.container, controller)
+        self.frame.tkraise()
+
+    def _setup_frame_params(self, container: tk.Frame, controller: Controller_MVC_Trade) -> tk.Tk:
+        '''Setup parameters linked to App'''
+        frame_params = tk.Frame(container)
+        frame_params.pack(side=tk.TOP, ipady=10)
+
+        title = tk.Label(frame_params, text="Definition of Parameters", font=Font(size=16))
+        title.pack(ipady=10)
+
+        # Environement
+        frame_env = tk.Frame(frame_params)
+        frame_env.pack(ipady=5)
+        self.label_env = tk.Label(frame_env, text="Environement -> Definition historic:")
         self.label_env.pack()
-        self.lb_env = ttk.Combobox(frame, values=controller.get_list_env(), state='readonly', width=50)
-        self.lb_env.pack(fill=tk.X, ipadx=5)
+        self.lb_env = ttk.Combobox(frame_env, values=controller.get_list_env(), state='readonly', width=50)
+        self.lb_env.pack(ipadx=5)
         self.lb_env.current(0)
         self.lb_env.bind("<<ComboboxSelected>>", controller.handle_click_list_env)
 
-    def _setup_agent(self, controller):
-        # Env is based on the type of historic chosen
-        frame = self.frame_agent
-        self.label_agent = tk.Label(frame, text="Agent:")
-        self.label_agent.pack()
-        self.frame_agent_load = tk.Frame(frame)
-        self.frame_agent_load.pack()
-        self.frame_agent_save = tk.Frame(frame)
-        self.frame_agent_save.pack()
-
-        # Load Model
-        tk.Label(self.frame_agent_load, text="Load -> ").pack(side = tk.LEFT, ipadx=5)
-        self.edit_agent_load = tk.Entry(self.frame_agent_load, bd=2)
+        # Agent
+        frame_agent = tk.Frame(frame_params)
+        frame_agent.pack(ipady=5)
+        tk.Label(frame_agent, text="Agent:").pack()
+        tk.Label(frame_agent, text="Load -> ").pack(side = tk.LEFT, ipadx=5)
+        self.edit_agent_load = tk.Entry(frame_agent, bd=2, state='readonly')
         self.edit_agent_load.pack(side = tk.LEFT,fill=tk.X, ipadx=5)
 
-        self.btn_search_agent_load = tk.Button(self.frame_agent_load, text=' ... ',
-                                                command=controller.handle_search_agent_load)
-        self.btn_search_agent_load.pack(side = tk.RIGHT, ipadx=10)
+        self.btn_search_agent = tk.Button(frame_agent, text=' ... ',
+                                                command=controller.handle_search_load_agent)
+        self.btn_search_agent.pack(side = tk.RIGHT)
 
-        # Save Model
-        tk.Label(self.frame_agent_save, text="Save -> ").pack(side = tk.LEFT, ipadx=5)
-        self.edit_agent_save = tk.Entry(self.frame_agent_save, bd=2)
-        self.edit_agent_save.pack(side = tk.LEFT,fill=tk.X, ipadx=5)
+        # Confirm Button
+        self.btn_confirm_params = tk.Button(frame_params, text='CONFIRM', font=Font(size=12),
+                                                command=controller.handle_confirm_params)
+        self.btn_confirm_params.pack(ipady=10)
 
-        self.btn_search_agent_save = tk.Button(self.frame_agent_save, text=' ... ',
-                                                command=controller.handle_search_agent_save)
-        self.btn_search_agent_save.pack(side = tk.RIGHT, ipadx=10)
+        return frame_params
 
-    def _setup_runstop(self, controller):
-        # Env is based on the type of historic chosen
-        frame = self.frame_run
-        self.btn_run = tk.Button(frame, text='Run', command=controller.handle_runstop, width=30, height=30, font=Font(self.root,size=12))
-        self.btn_run.pack(pady=20)
- 
+
+    def _setup_run(self, container: tk.Frame, controller: Controller_MVC_Trade) -> tk.Frame:
+        '''Setup Tasks linked to App'''
+        frame_tasks = tk.Frame(container)
+        frame_tasks.pack(side=tk.TOP, ipady=10, fill=tk.X)
+
+        title = tk.Label(frame_tasks, text="TASKS", font=Font(size=16))
+        title.pack(ipady=10)
         
-    def setup(self, controller):
+        frame_right = tk.Frame(frame_tasks)
+        frame_right.pack(side=tk.LEFT, ipadx=5, ipady=5)
 
+        # Button Update + Return
+        frame_left = tk.Frame(frame_tasks)
+        frame_left.pack(side=tk.LEFT, ipadx=5, ipady=5)
+        self.btn_update_dtb = tk.Button(frame_left, text='Update Database',
+                                                command=controller.handle_update_dtb)
+        self.btn_update_dtb.pack()
+        self.btn_return = tk.Button(frame_left, text='<- Return', font=Font(size=8),
+                                                command=controller.handle_return)
+        self.btn_return.pack(side=tk.BOTTOM)
+
+        # Train / Test / Save
+        WIDTH_CENTER = 10
+        PADDING_CENTER = 5
+        frame_center = tk.Frame(frame_tasks)
+        frame_center.pack(side=tk.LEFT, ipadx=PADDING_CENTER, ipady=PADDING_CENTER)
+
+        self.btn_train = tk.Button(frame_center, text='Train', width=WIDTH_CENTER,
+                                                command=controller.handle_train)
+        self.btn_train.pack(padx=PADDING_CENTER, pady=PADDING_CENTER)
+
+        self.btn_test = tk.Button(frame_center, text='Test', width=WIDTH_CENTER,
+                                                command=controller.handle_test)
+        self.btn_test.pack(padx=PADDING_CENTER, pady=PADDING_CENTER)
+
+        self.btn_save = tk.Button(frame_center, text='Save', width=WIDTH_CENTER,
+                                                command=controller.handle_save)
+        self.btn_save.pack(padx=PADDING_CENTER, pady=PADDING_CENTER) 
+        return frame_tasks    
+    
+    def _setup_stop(self, container: tk.Frame, controller: Controller_MVC_Trade) -> tk.Frame:
+        '''Setup Tasks linked to App'''
+        frame_stop = tk.Frame(container)
+        frame_stop.pack(side=tk.TOP, ipady=10, fill=tk.BOTH)
+
+        title = tk.Label(frame_stop, text="Running...", font=Font(size=16))
+        title.pack(ipady=10)
+
+        self.btn_stop = tk.Button(frame_stop, text='Stop', font=Font(size=16),
+                                                command=controller.handle_stop)
+        self.btn_stop.pack(fill=tk.BOTH)
+        return frame_stop   
+    
+        
+    def setup(self, controller: Controller_MVC_Trade, first_frame: Enum_Frames=Enum_Frames.Params_Frame):
         # setup tkinter
         self.root = tk.Tk()
-        self.root.geometry("400x200")
+        self.root.geometry("400x250")
         self.root.title("Coinbase Bot")
-
-        # create the gui
-        self.frame = tk.Frame(self.root)
-        self.frame.pack(fill=tk.BOTH, expand=1)
-
-        # Frames to organize ihm
-        self.frame_params = tk.Frame(self.frame)
-        self.frame_params.pack(side=tk.TOP)
-        self.frame_agent_env = tk.Frame(self.frame_params)
-        self.frame_agent_env.pack(side=tk.LEFT)
-        self.frame_mode = tk.Frame(self.frame_params)
-        self.frame_mode.pack(side=tk.RIGHT)
-
-        self.frame_env = tk.Frame(self.frame_agent_env)
-        self.frame_env.pack(side=tk.TOP)
-        self.frame_agent = tk.Frame(self.frame_agent_env)
-        self.frame_agent.pack(side=tk.TOP)
-        self.frame_run = tk.Frame(self.frame)
-        self.frame_run.pack(side=tk.TOP)
-
+        self.container = tk.Frame(self.root)
+        self.container.pack(fill=tk.BOTH, expand=1)
+        # Show first Frame
+        self.set_new_frame(first_frame, controller)     
         
-        self._setup_env(controller)
-        self._setup_agent(controller)
-        self._setup_mode(controller)
-        self._setup_runstop(controller)
-
-    
+       
     def start_main_loop(self):
         # start the loop
         self.root.mainloop()
@@ -266,8 +347,7 @@ if __name__=="__main__":
         }
     ]
 
-    runner = Abstract_RL_Train_Runner() # Corresponds to the application to execute
-    model = Model_MVC_Trade(runner) # Corresponds to the model associated to the IHM
+    model = Easy_RL_App() # Corresponds to the application to execute
     view = TkView_MVC_Trade() # WIDGETS
     c = Controller_MVC_Trade(model, view, list_Historic_Environement)
-    c.start()
+    c.start(first_frame=Enum_Frames.Params_Frame)

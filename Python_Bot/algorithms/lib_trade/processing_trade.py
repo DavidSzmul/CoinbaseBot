@@ -136,6 +136,7 @@ class Experience_Trade:
     evolution: np.ndarray
     current_trades: pd.DataFrame    
 
+
 class Mode_Algo(Enum):
     train = 1
     test = 2

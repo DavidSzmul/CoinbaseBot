@@ -10,12 +10,16 @@ from typing import  Any, List
 import time
 import os
 import threading
+
 import config
+from algorithms.ihm_trade.loading_frame import Loading_Frame
 
 
 class Abstract_RL_App(ABC):
     '''Abstraction of App'''
+
     is_running: bool=False
+
 
     @abstractmethod
     def save_model(self, path:str):
@@ -45,49 +49,52 @@ class Abstract_RL_App(ABC):
         self.is_running = False
 
 
+# def _use_thread(func, self, *args):
+#         if self.is_running:
+#             return
+#         self.is_running = True
+#         processThread = threading.Thread(target=func, args=[self]+args)
+#         processThread.start()
+
 class Easy_RL_App(Abstract_RL_App):
     '''Simulation of more complex application (for testing)'''
 
     path_agent: str
     
-    def _use_thread(self, func, *args):
-        if self.is_running:
-            return
-        self.is_running = True
-        processThread = threading.Thread(target=func, args=args)
-        processThread.start()
+    def _thread_run(func):
+        def inner(self):
+            if self.is_running:
+                return
+            self.is_running = True
+            processThread = threading.Thread(target=func, args=[self])
+            processThread.start()
+        return inner
 
+    @_thread_run
     def train(self):
-        self._use_thread(self.train_thread)
-        if self.is_running:
-            return
-
-    def test(self):
-        self._use_thread(self.test_thread)
-        if self.is_running:
-            return
-
-    def update_train_test_dtb(self):
-        print('Database updated: Ready to execute')
-
-    def define_params(self, min_historic: List[int],nb_cycle_historic: List[int], path_agent:str):
-        '''Definition of environment + agent'''
-        print('Params Initialized')
-        self.update_train_test_dtb()
-
-    def train_thread(self):
         ctr=0
         while self.is_running:
             ctr+=1
             print('Train:', ctr)
             time.sleep(1)
 
-    def test_thread(self):
+    @_thread_run
+    def test(self):
         ctr=0
         while self.is_running:
             ctr+=1
             print('Test:', ctr)
             time.sleep(0.5)
+
+
+    def update_train_test_dtb(self):
+        time.sleep(2)
+        print('Database updated: Ready to execute')
+
+    def define_params(self, min_historic: List[int],nb_cycle_historic: List[int], path_agent:str):
+        '''Definition of environment + agent'''
+        print('Params Initialized')
+        self.update_train_test_dtb()
 
     def save_model(self, path: str):
         print('Agent Model Saved\n', path)
@@ -102,6 +109,7 @@ class Controller_MVC_Trade:
     model: Abstract_RL_App
     view: Any
     default_folder: str
+    is_waiting_model: bool=False
 
     def __init__(self, model: Abstract_RL_App, view, list_Historic_Environement: List):
         self.model = model
@@ -112,6 +120,26 @@ class Controller_MVC_Trade:
         self.view.setup(self, first_frame=first_frame)
         self.update_default_folder()
         self.view.start_main_loop()
+
+    def _thread_wait_model(func):
+        def inner(self):
+            if self.is_waiting_model:
+                return
+            self.is_waiting_model = True
+            self.view.add_loading_frame()
+
+            def close_callback():
+                self.view.delete_loading_frame()
+                self.is_waiting_model = False
+                
+            def wrapper():
+                func(self)
+                close_callback()
+                
+            processThread = threading.Thread(target=wrapper, args=[])
+            processThread.start()
+        return inner
+
 
     def get_list_env(self):
         return [d['name'] for d in self.list_Historic_Environement]
@@ -129,6 +157,9 @@ class Controller_MVC_Trade:
 
 
     def update_default_folder(self):
+        if not hasattr(self.view, 'lb_env'):
+            self.default_folder = ''
+            return
         idx_chosen = self.get_list_env().index(self.view.lb_env.get())
         self.default_folder = os.path.join(config.MODELS_DIR, self.list_Historic_Environement[idx_chosen]['subfolder']).replace('\\','/')
         if not os.path.exists(self.default_folder):
@@ -146,6 +177,7 @@ class Controller_MVC_Trade:
             raise AssertionError('You must choose a file on the proposed folder')
         self._set_agent_load_file(file_user)
 
+    @_thread_wait_model
     def handle_confirm_params(self):
         # Environment Definition
         idx_env_chosen = self.get_list_env().index(self.view.lb_env.get())
@@ -164,6 +196,7 @@ class Controller_MVC_Trade:
         self.model.define_params(min_historic, nb_cycle_historic, path_agent)
         self.view.set_new_frame(Enum_Frames.Run_Frame, self)
 
+    @_thread_wait_model
     def handle_update_dtb(self):
         self.model.update_train_test_dtb()
 
@@ -321,11 +354,20 @@ class TkView_MVC_Trade(View):
         # setup tkinter
         self.root = tk.Tk()
         self.root.geometry("400x250")
+        
         self.root.title("Coinbase Bot")
         self.container = tk.Frame(self.root)
         self.container.pack(fill=tk.BOTH, expand=1)
         # Show first Frame
         self.set_new_frame(first_frame, controller)     
+
+    def add_loading_frame(self):
+        self.loading_frame = Loading_Frame(self.container)
+        self.loading_frame.start()
+
+    def delete_loading_frame(self):
+        if self.loading_frame:
+            self.loading_frame.stop()
         
        
     def start_main_loop(self):
@@ -350,4 +392,4 @@ if __name__=="__main__":
     model = Easy_RL_App() # Corresponds to the application to execute
     view = TkView_MVC_Trade() # WIDGETS
     c = Controller_MVC_Trade(model, view, list_Historic_Environement)
-    c.start(first_frame=Enum_Frames.Params_Frame)
+    c.start(first_frame=Enum_Frames.Run_Frame)

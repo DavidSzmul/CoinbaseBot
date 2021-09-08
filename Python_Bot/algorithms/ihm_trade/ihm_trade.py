@@ -41,20 +41,13 @@ class Abstract_RL_App(ABC):
     def test(self):
         pass
     
-    # @abstractmethod
-    # def real_time(self):
-    #     pass
+    @abstractmethod
+    def real_time(self):
+        pass
 
     def stop(self):
         self.is_running = False
 
-
-# def _use_thread(func, self, *args):
-#         if self.is_running:
-#             return
-#         self.is_running = True
-#         processThread = threading.Thread(target=func, args=[self]+args)
-#         processThread.start()
 
 class Easy_RL_App(Abstract_RL_App):
     '''Simulation of more complex application (for testing)'''
@@ -86,6 +79,13 @@ class Easy_RL_App(Abstract_RL_App):
             print('Test:', ctr)
             time.sleep(0.5)
 
+    @_thread_run
+    def real_time(self):
+        ctr=0
+        while self.is_running:
+            ctr+=1
+            print('Real-Time:', ctr)
+            time.sleep(0.1)
 
     def update_train_test_dtb(self):
         time.sleep(2)
@@ -101,7 +101,7 @@ class Easy_RL_App(Abstract_RL_App):
 
 class Enum_Frames(Enum):
     Params_Frame = 1
-    Run_Frame = 2
+    Tasks_Frame = 2
     Stop_Frame = 3
 
 class Controller_MVC_Trade:
@@ -194,7 +194,7 @@ class Controller_MVC_Trade:
 
         # Set parameters to app
         self.model.define_params(min_historic, nb_cycle_historic, path_agent)
-        self.view.set_new_frame(Enum_Frames.Run_Frame, self)
+        self.view.set_new_frame(Enum_Frames.Tasks_Frame, self)
 
     @_thread_wait_model
     def handle_update_dtb(self):
@@ -202,6 +202,7 @@ class Controller_MVC_Trade:
 
     def handle_return(self):
         self.view.set_new_frame(Enum_Frames.Params_Frame, self)
+        self.update_default_folder()
 
     def handle_train(self):
         self.model.train()
@@ -224,9 +225,13 @@ class Controller_MVC_Trade:
             raise AssertionError('You must determine a file on the proposed folder')
         self.model.save_model(path_user)
 
+    def handle_real_time(self):
+        self.model.real_time()
+        self.view.set_new_frame(Enum_Frames.Stop_Frame, self)
+
     def handle_stop(self):
         self.model.stop()
-        self.view.set_new_frame(Enum_Frames.Run_Frame, self)
+        self.view.set_new_frame(Enum_Frames.Tasks_Frame, self)
 
 
 
@@ -247,7 +252,7 @@ class TkView_MVC_Trade(View):
 
         dict_frame = {
             Enum_Frames.Params_Frame: self._setup_frame_params,
-            Enum_Frames.Run_Frame: self._setup_run,
+            Enum_Frames.Tasks_Frame: self._setup_run,
             Enum_Frames.Stop_Frame: self._setup_stop,
         }
         if enum not in dict_frame:
@@ -298,43 +303,45 @@ class TkView_MVC_Trade(View):
 
     def _setup_run(self, container: tk.Frame, controller: Controller_MVC_Trade) -> tk.Frame:
         '''Setup Tasks linked to App'''
+        WIDTH = 15
+        PADDING = 5
         frame_tasks = tk.Frame(container)
-        frame_tasks.pack(side=tk.TOP, ipady=10, fill=tk.X)
+        frame_tasks.grid(sticky='nsew', padx=2*PADDING)
+        frame_tasks.rowconfigure(0, weight=2, minsize=70)
 
         title = tk.Label(frame_tasks, text="TASKS", font=Font(size=16))
-        title.pack(ipady=10)
-        
-        frame_right = tk.Frame(frame_tasks)
-        frame_right.pack(side=tk.LEFT, ipadx=5, ipady=5)
+        title.grid(row=0, column=1, padx=PADDING, pady=PADDING) 
 
         # Button Update + Return
-        frame_left = tk.Frame(frame_tasks)
-        frame_left.pack(side=tk.LEFT, ipadx=5, ipady=5)
-        self.btn_update_dtb = tk.Button(frame_left, text='Update Database',
-                                                command=controller.handle_update_dtb)
-        self.btn_update_dtb.pack()
-        self.btn_return = tk.Button(frame_left, text='<- Return', font=Font(size=8),
-                                                command=controller.handle_return)
-        self.btn_return.pack(side=tk.BOTTOM)
+        # frame_left = tk.Frame(frame_tasks)
+        # frame_left.pack(side=tk.LEFT, ipadx=5, ipady=5)
+        self.btn_update_dtb = tk.Button(frame_tasks, text='Update Database', width=WIDTH,
+                                        command=controller.handle_update_dtb)
+        self.btn_update_dtb.grid(row=2, column=0, sticky=tk.E, padx=PADDING, pady=PADDING)
+
+        self.btn_return = tk.Button(frame_tasks, text='<- Return', font=Font(size=8),
+                                        command=controller.handle_return)
+        self.btn_return.grid(row=4, column=0, sticky=tk.W, padx=PADDING, pady=PADDING)
 
         # Train / Test / Save
-        WIDTH_CENTER = 10
-        PADDING_CENTER = 5
-        frame_center = tk.Frame(frame_tasks)
-        frame_center.pack(side=tk.LEFT, ipadx=PADDING_CENTER, ipady=PADDING_CENTER)
+        self.btn_train = tk.Button(frame_tasks, text='Train', width=WIDTH,
+                                    command=controller.handle_train)
+        self.btn_train.grid(row=1, column=1, padx=PADDING, pady=PADDING)
 
-        self.btn_train = tk.Button(frame_center, text='Train', width=WIDTH_CENTER,
-                                                command=controller.handle_train)
-        self.btn_train.pack(padx=PADDING_CENTER, pady=PADDING_CENTER)
+        self.btn_test = tk.Button(frame_tasks, text='Test', width=WIDTH,
+                                    command=controller.handle_test)
+        self.btn_test.grid(row=2, column=1, padx=PADDING, pady=PADDING)
 
-        self.btn_test = tk.Button(frame_center, text='Test', width=WIDTH_CENTER,
-                                                command=controller.handle_test)
-        self.btn_test.pack(padx=PADDING_CENTER, pady=PADDING_CENTER)
+        self.btn_save = tk.Button(frame_tasks, text='Save', width=WIDTH,
+                                    command=controller.handle_save)
+        self.btn_save.grid(row=3, column=1, padx=PADDING, pady=PADDING)
 
-        self.btn_save = tk.Button(frame_center, text='Save', width=WIDTH_CENTER,
-                                                command=controller.handle_save)
-        self.btn_save.pack(padx=PADDING_CENTER, pady=PADDING_CENTER) 
-        return frame_tasks    
+        # Real Time
+        self.btn_rt = tk.Button(frame_tasks, text='Real-Time', width=WIDTH,
+                                    command=controller.handle_real_time)
+        self.btn_rt.grid(row=2, column=2, sticky=tk.E, padx=PADDING, pady=PADDING)
+
+        return frame_tasks     
     
     def _setup_stop(self, container: tk.Frame, controller: Controller_MVC_Trade) -> tk.Frame:
         '''Setup Tasks linked to App'''
@@ -345,7 +352,7 @@ class TkView_MVC_Trade(View):
         title.pack(ipady=10)
 
         self.btn_stop = tk.Button(frame_stop, text='Stop', font=Font(size=16),
-                                                command=controller.handle_stop)
+                                    command=controller.handle_stop)
         self.btn_stop.pack(fill=tk.BOTH)
         return frame_stop   
     
@@ -356,6 +363,12 @@ class TkView_MVC_Trade(View):
         self.root.geometry("400x250")
         
         self.root.title("Coinbase Bot")
+
+        # Icon
+        folder,_ = os.path.split(os.path.realpath(__file__))
+        file = 'bot.ico'
+        path_icon = os.path.join(folder, file)
+        self.root.iconbitmap(path_icon)
         self.container = tk.Frame(self.root)
         self.container.pack(fill=tk.BOTH, expand=1)
         # Show first Frame
@@ -392,4 +405,4 @@ if __name__=="__main__":
     model = Easy_RL_App() # Corresponds to the application to execute
     view = TkView_MVC_Trade() # WIDGETS
     c = Controller_MVC_Trade(model, view, list_Historic_Environement)
-    c.start(first_frame=Enum_Frames.Run_Frame)
+    c.start(first_frame=Enum_Frames.Tasks_Frame)

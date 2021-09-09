@@ -50,7 +50,7 @@ class Historic_Coinbase_Generator(Historic_Generator):
         # Load Database
         crypto_names = [d['coinbase_name'] for d in Historic_coinbase_dtb.load_studied_crypto()]
         df = Historic_coinbase_dtb.load(self.resolution, path)
-        if verbose: print('Database loaded...')
+        if verbose: print('Old database loaded...')
 
         # 1) Complete dataframe with new timestamps + studied crytpo
         if verbose: print('Adding missing values in historic...')
@@ -108,7 +108,7 @@ class Historic_Coinbase_Generator(Historic_Generator):
 
         # Save Database
         Historic_coinbase_dtb.save(self.resolution, df, path)
-        if verbose: print('Database saved...')
+        if verbose: print('Database refreshed saved...')
 
 
 def call_Coinbase_api(start: int=0, end: int=0, step: int=60, crypto: str='BTC-USD'):

@@ -1,6 +1,7 @@
 from collections import deque
+import itertools
 from dataclasses import dataclass
-from typing import Any, List
+from typing import Any, List, Tuple
 import numpy as np
 
 from rl_lib.memory.memory import Experience
@@ -25,6 +26,8 @@ class RL_Train_Perfs_Historic:
     
     total_rewards_avg: deque
     total_rewards_std: deque
+    envelopes_plus: deque
+    envelopes_minus: deque
 
     def __init__(self, max_deque: int=10000, nb_window=None):
         self.max_deque = max_deque
@@ -43,6 +46,8 @@ class RL_Train_Perfs_Historic:
         if self.is_avg_criteria():
             self.total_rewards_avg = deque(maxlen=self.max_deque)
             self.total_rewards_std = deque(maxlen=self.max_deque)
+            self.envelopes_plus = deque(maxlen=self.max_deque)
+            self.envelopes_minus = deque(maxlen=self.max_deque)
 
     def add(self, perfs: RL_Train_Perfs):
         if self.t:
@@ -54,9 +59,16 @@ class RL_Train_Perfs_Historic:
         self.epsilons.append(perfs.epsilon)
 
         if self.is_avg_criteria():
-            reward_window = self.total_rewards[len(self.total_rewards)-self.nb_window]
-            self.total_rewards_avg.append(np.mean(reward_window))
-            self.total_rewards_std.append(np.std(reward_window))
+            NB_SIGMA = 3
+
+            reward_window = list(itertools.islice(self.total_rewards, max(len(self.total_rewards)-self.nb_window, 0), len(self.total_rewards)))
+            avg = np.mean(reward_window)
+            std = np.std(reward_window)
+            self.total_rewards_avg.append(avg)
+            self.total_rewards_std.append(std)
+            self.envelopes_plus.append(avg + NB_SIGMA*std)
+            self.envelopes_minus.append(avg - NB_SIGMA*std)
+            
 
 class Agent_Environment_Manager:
 
@@ -72,13 +84,13 @@ class Agent_Environment_Manager:
         self.env = env
         self.flag_return_train_perfs = flag_return_train_perfs
         
-    def _verify_compatibility(agent: Agent, env: Environment):
+    def _verify_compatibility(self, agent: Agent, env: Environment):
         flag_compatible = (np.all(agent.action_shape == env.action_shape) 
                         and np.all(agent.state_shape == env.state_shape))
         if not flag_compatible:
             raise AssertionError('Agent and Environment are not compatible based on Action/State shapes')
  
-    def loop_episode_train(self, nb_cycle_train: int=1) -> Any:
+    def loop_episode_train(self, nb_cycle_train: int=1) -> Tuple[Any, RL_Train_Perfs]:
         '''Loop on Agent+Environment until environment is done'''
         if nb_cycle_train<1:
             raise ValueError('nb_cycle_train shall be strictly superior to 1')
@@ -87,14 +99,14 @@ class Agent_Environment_Manager:
         state = self.env.reset()
         done = False
         ctr_cycle_train = 0
-        perfs = None
+        perfs=None
 
-        if self.self.flag_return_train_perfs:
+        if self.flag_return_train_perfs:
             total_reward=0
             total_loss=0
 
         while not done:
-            # Choose action (random or )
+            # Choose action depending on exploration
             action = self.agent.get_action_training(state)
             new_state, reward, done, info = self.env.step(action)
             experience = Experience(state, action, new_state, reward, done)

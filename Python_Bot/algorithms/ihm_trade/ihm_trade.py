@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
 from tkinter.font import Font
-from tkinter.filedialog import asksaveasfile
+from tkinter.filedialog import askdirectory
 
 from abc import ABC, abstractmethod
 from typing import  Any, List
@@ -19,7 +19,6 @@ class Abstract_RL_App(ABC):
     '''Abstraction of App'''
 
     is_running: bool=False
-
 
     @abstractmethod
     def save_model(self, path:str):
@@ -45,15 +44,6 @@ class Abstract_RL_App(ABC):
     def real_time(self):
         pass
 
-    def stop(self):
-        self.is_running = False
-
-
-class Easy_RL_App(Abstract_RL_App):
-    '''Simulation of more complex application (for testing)'''
-
-    path_agent: str
-    
     def _thread_run(func):
         def inner(self):
             if self.is_running:
@@ -63,7 +53,16 @@ class Easy_RL_App(Abstract_RL_App):
             processThread.start()
         return inner
 
-    @_thread_run
+    def stop(self):
+        self.is_running = False
+
+
+
+class Easy_RL_App(Abstract_RL_App):
+    '''Simulation of more complex application (for testing)'''
+
+    path_agent: str
+    @Abstract_RL_App._thread_run
     def train(self):
         ctr=0
         while self.is_running:
@@ -71,7 +70,7 @@ class Easy_RL_App(Abstract_RL_App):
             print('Train:', ctr)
             time.sleep(1)
 
-    @_thread_run
+    @Abstract_RL_App._thread_run
     def test(self):
         ctr=0
         while self.is_running:
@@ -79,7 +78,7 @@ class Easy_RL_App(Abstract_RL_App):
             print('Test:', ctr)
             time.sleep(0.5)
 
-    @_thread_run
+    @Abstract_RL_App._thread_run
     def real_time(self):
         ctr=0
         while self.is_running:
@@ -116,9 +115,11 @@ class Controller_MVC_Trade:
         self.view = view
         self.list_Historic_Environement = list_Historic_Environement
     
-    def start(self, first_frame: Enum_Frames=Enum_Frames.Params_Frame):
+    def setup(self, first_frame: Enum_Frames=Enum_Frames.Params_Frame):
         self.view.setup(self, first_frame=first_frame)
         self.update_default_folder()
+    
+    def start(self):
         self.view.start_main_loop()
 
     def _thread_wait_model(func):
@@ -167,15 +168,14 @@ class Controller_MVC_Trade:
 
     def handle_search_load_agent(self):
         # Choose file on this folder
-        file_path = filedialog.askopenfilename(title="Select Model Agent", 
-                                                filetypes=[( "Text File" , ".txt" )],
+        model_path = filedialog.askdirectory(title="Select Model Agent", 
                                                 initialdir=self.default_folder)
         
-        folder_user, file_user = os.path.split(file_path)
-        if (folder_user != self.default_folder and file_user !=''): # Wrong folder
+        folder_user, model_user = os.path.split(model_path)
+        if (folder_user != self.default_folder and model_user !=''): # Wrong folder
             self._set_agent_load_file('')
             raise AssertionError('You must choose a file on the proposed folder')
-        self._set_agent_load_file(file_user)
+        self._set_agent_load_file(model_user)
 
     @_thread_wait_model
     def handle_confirm_params(self):
@@ -190,7 +190,7 @@ class Controller_MVC_Trade:
             path_agent = None
         else:
             folder = os.path.join(config.MODELS_DIR, self.list_Historic_Environement[idx_env_chosen]['subfolder'])
-            path_agent = os.path.join(folder, file)
+            path_agent = os.path.join(folder, file).replace('\\','/')+'/'
 
         # Set parameters to app
         self.model.define_params(min_historic, nb_cycle_historic, path_agent)
@@ -214,16 +214,19 @@ class Controller_MVC_Trade:
 
     def handle_save(self):
         # Determine path of save
-        files = [('Text Document', '*.txt')]
-        res = asksaveasfile(filetypes = files, defaultextension = files, initialdir=self.default_folder)
-        if not res: # Canceling
-            return
+        model_path = filedialog.askdirectory(title="Select Model Agent", 
+                                                initialdir=self.default_folder)
         
-        path_user = res.name
-        folder_user, _ = os.path.split(path_user)
-        if (folder_user != self.default_folder): # Wrong folder
-            raise AssertionError('You must determine a file on the proposed folder')
-        self.model.save_model(path_user)
+        folder_parent, model_user = os.path.split(model_path)
+        if model_user=='': # Canceling
+            return
+
+        if (folder_parent != self.default_folder): # Wrong folder
+            self._set_agent_load_file('')
+            raise AssertionError('You must choose a file on the proposed folder')
+
+        model_path += '/'
+        self.model.save_model(model_path)
 
     def handle_real_time(self):
         self.model.real_time()
@@ -246,7 +249,7 @@ class View(ABC):
 
 class TkView_MVC_Trade(View):
 
-    frame: tk.Tk=None
+    frame: tk.Frame=None
 
     def set_new_frame(self, enum: Enum_Frames, controller: Controller_MVC_Trade):
 
@@ -374,6 +377,9 @@ class TkView_MVC_Trade(View):
         # Show first Frame
         self.set_new_frame(first_frame, controller)     
 
+    def get_root(self):
+        return self.root
+
     def add_loading_frame(self):
         self.loading_frame = Loading_Frame(self.container)
         self.loading_frame.start()
@@ -405,4 +411,5 @@ if __name__=="__main__":
     model = Easy_RL_App() # Corresponds to the application to execute
     view = TkView_MVC_Trade() # WIDGETS
     c = Controller_MVC_Trade(model, view, list_Historic_Environement)
-    c.start(first_frame=Enum_Frames.Tasks_Frame)
+    c.setup(first_frame=Enum_Frames.Params_Frame)
+    c.start()

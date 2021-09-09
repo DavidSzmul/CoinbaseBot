@@ -151,8 +151,7 @@ class Generator_Trade:
     ctr_train_test: int
     end_of_mode: bool
 
-    def __init__(self, mode: Mode_Algo, scaler: Scaler_Trade):
-        self.set_mode(mode)
+    def __init__(self, scaler: Scaler_Trade):
         self.scaler = scaler
 
     def set_mode(self, mode: Mode_Algo):
@@ -165,6 +164,22 @@ class Generator_Trade:
 
     def get_size_historic(self):
         return len(self.scaler.get_idx_window_historic())
+
+    def print_advancement(self):
+        if self.mode == Mode_Algo.real_time: # REAL-TIME
+            # Infinite advancement for real time
+            return
+        if self.mode == Mode_Algo.train: # TRAIN
+            text = 'Training:'
+            length = len(self.experiences_train)
+
+        elif self.mode == Mode_Algo.test:  # TEST
+            text = 'Test:'
+            length = len(self.experiences_test)            
+
+        prc_advance = self.ctr_train_test/length*100
+        prc_str = '%.2f%%' % prc_advance
+        print(text + f'  {self.ctr_train_test}/{length}  //  ' + prc_str)
 
     def get_new_experience(self):
         if self.mode == Mode_Algo.train: # TRAIN

@@ -1,6 +1,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, List
+
+import tkinter as tk
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.backends.backend_tkagg as  backend_tkagg
 import matplotlib.pyplot as plt
 
 class Displayer(ABC):
@@ -24,24 +29,39 @@ class Displayer(ABC):
 class MatplotlibPlot:
     x: Any
     y: Any
+    fmt: Any=None
     label: str=None
     linewidth: int=1
 
 class Matplotlib_Displayer(Displayer):
 
-        def __init__(self, fig, ax, nb_cycle_update: int=1, init_show: bool=True):
+        def __init__(self, fig, ax, master: tk.Tk, nb_cycle_update: int=1):
             Displayer.__init__(self, nb_cycle_update=nb_cycle_update)
             self.fig = fig
             self.ax = ax
-            plt.ion()
-            if init_show:
-                plt.show()
+            self.master = master
+            self.canvas = None
             self.reinit_fig() 
 
         def reinit_fig(self):
             '''Reinitialization of display'''
             for a in self.ax:
                 a.clear()
+
+        def setup_new_window(self, title: str='test', text: str='hello'):
+
+            self.new_window = tk.Toplevel(self.master)
+            self.new_window.title(title)
+            self.new_window.geometry("400x400")
+        
+            # A Label widget to show in toplevel
+            tk.Label(self.new_window,
+                text=text).pack()
+
+            self.canvas = backend_tkagg.FigureCanvasTkAgg(self.fig, self.new_window)
+            self.canvas.get_tk_widget().pack(side=tk.BOTTOM, expand=True) #, fill=tk.BOTH
+            self.canvas._tkcanvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+            
 
         def update(self, data: List[List[MatplotlibPlot]]):
             
@@ -59,45 +79,84 @@ class Matplotlib_Displayer(Displayer):
             #Display only plot for the moment
             for i,d in enumerate(data):
                 for signal in d:
-                    self.ax[i].plot(signal.x, signal.y, 
-                        linewidth=signal.linewidth,
-                        label=signal.label)
+                    if signal.fmt:
+                        self.ax[i].plot(signal.x, signal.y, signal.fmt,
+                            linewidth=signal.linewidth,
+                            label=signal.label)
+
+                    else:
+                        self.ax[i].plot(signal.x, signal.y, 
+                            linewidth=signal.linewidth,
+                            label=signal.label)
 
             # Enable legend
             for a in self.ax:
                 a.legend()
             self.fig.canvas.draw()
-            self.fig.canvas.flush_events()
+
 
 if __name__=='__main__':
+
+    data_displayer= [
+        [
+            # 1rst Subplot
+            [
+                MatplotlibPlot([1,2,3,4], [0,1,2,3], label='test 1.1'),
+                MatplotlibPlot([2,3,4,5], [0,1,2,3], label='test 1.2'),
+                MatplotlibPlot([1,2,3,4], [1,2,3,4], label='test 1.3')
+            ],
+            # 2nd Subplot
+            [
+                MatplotlibPlot([1,10], [-1,1], label='test 2'),
+            ],
+        ],
+        [
+            # 1rst Subplot
+            [
+                MatplotlibPlot([1,2,3,4], [0,-1,-2,-3], label='test 1.1'),
+                MatplotlibPlot([2,3,4,5], [0,-1,-2,-3], label='test 1.2'),
+                MatplotlibPlot([1,2,3,4], [-1,-2,-3,-4], label='test 1.3')
+            ],
+            # 2nd Subplot
+            [
+                MatplotlibPlot([1,10], [-1,1], label='test 2'),
+            ],
+        ],
+        [
+            # 1rst Subplot
+            [
+                MatplotlibPlot([1,2,3,4], [0,1,2,3], label='test 1.1'),
+                MatplotlibPlot([2,3,4,5], [0,1,2,3], label='test 1.2'),
+                MatplotlibPlot([1,2,3,4], [1,2,3,4], label='test 1.3')
+            ],
+            # 2nd Subplot
+            [
+                MatplotlibPlot([1,10], [-1,1], label='test 2'),
+            ],
+        ],
+        [
+            # 1rst Subplot
+            [
+                MatplotlibPlot([1,2,3,4], [0,-1,-2,-3], label='test 1.1'),
+                MatplotlibPlot([2,3,4,5], [0,-1,-2,-3], label='test 1.2'),
+                MatplotlibPlot([1,2,3,4], [-1,-2,-3,-4], label='test 1.3')
+            ],
+            # 2nd Subplot
+            [
+                MatplotlibPlot([1,10], [-1,1], 'r', label='test 2'),
+            ],
+        ],
+    ]
+    
+    # Initialisation
     fig, ax = plt.subplots(2, 1, sharex=True)
-    disp = Matplotlib_Displayer(fig, ax, nb_cycle_update=1)
+    plt.close() # This enables to close correctly mainloop when app is destroyed
+    root = tk.Tk()
+    disp = Matplotlib_Displayer(fig, ax, root, nb_cycle_update=1)
+    disp.setup_new_window()
 
-    data_displayer_1 = [
-        # 1rst Subplot
-        [
-            MatplotlibPlot([1,2,3,4], [0,1,2,3], 'test 1.1'),
-            MatplotlibPlot([2,3,4,5], [0,1,2,3], 'test 1.2'),
-            MatplotlibPlot([1,2,3,4], [1,2,3,4], 'test 1.3')
-        ],
-        # 2nd Subplot
-        [
-            MatplotlibPlot([1,10], [-1,1], 'test 2'),
-        ],
-    ]
-    data_displayer_2 = [
-        # 1rst Subplot
-        [
-            MatplotlibPlot([1,2,3,4], [0,-1,-2,-3], 'test 1.1'),
-            MatplotlibPlot([2,3,4,5], [0,-1,-2,-3], 'test 1.2'),
-            MatplotlibPlot([1,2,3,4], [-1,-2,-3,-4], 'test 1.3')
-        ],
-        # 2nd Subplot
-        [
-            MatplotlibPlot([1,10], [-1,1], 'test 2'),
-        ],
-    ]
-    disp.update(data_displayer_1)
-    disp.update(data_displayer_2)
-
+    DELTA_TIME=1000
+    for i, d in enumerate(data_displayer):
+        root.after((i+1)*DELTA_TIME, disp.update, d)
+    root.mainloop()
     print('done')

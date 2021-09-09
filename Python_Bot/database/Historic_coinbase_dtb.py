@@ -21,7 +21,7 @@ def load_studied_crypto(path: str=None):
         studied_crypto = json.load(f)
     return studied_crypto
 
-def load(resolution: Resolution_Historic, path: str=None) -> pd.DataFrame:
+def load(resolution: Resolution_Historic=Resolution_Historic.min, path: str=None) -> pd.DataFrame:
     '''Load Historic of crypto values'''
     # Path of storage (create new file if empty)
     if path is None:

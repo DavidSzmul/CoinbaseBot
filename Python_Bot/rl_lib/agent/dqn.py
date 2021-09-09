@@ -68,7 +68,7 @@ class DQN_Agent(Agent):
         if model is not None:
             self.model = model
             print('DQN Model IMPORTED')
-        elif name_model is not None:
+        elif name_model is not None and name_model != '':
             self.model = keras.models.load_model(name_model) 
             print('DQN Model LOADED')
         else:
@@ -85,8 +85,8 @@ class DQN_Agent(Agent):
         return NetworkGenerator().create_DQN_Model(self.state_shape, self.action_shape, 
                                 layers=layers_model, learning_rate=self.params.learning_rate)
 
-    def save_model(self, filepath, overwrite=False):
-        keras.models.save_model(self.model, filepath, overwrite=overwrite)
+    def save_model(self, filepath, overwrite: bool=False):
+        keras.models.save_model(self.model, filepath, save_format='tf', overwrite=overwrite)
 
     def _clip_reward(self, reward: float) -> float:
         #Clip of reward
@@ -101,15 +101,15 @@ class DQN_Agent(Agent):
 
         #Clip of reward
         reward=self._clip_reward(reward)
-
         Q_model = self.model.predict(np.array([state]))[0]
-        Q_next_target = self.target_model.predict(np.array([next_state]))[0] #Target model
         old_Q = np.copy(Q_model)
+        Q_next_target = self.target_model.predict(np.array([next_state]))[0] #Target model
 
         ### Adapt Q_model depending of reward of next state
+        action = np.nonzero(action)
         if done:
             Q_model[action] = reward
-        else:
+        else: 
             Q_model[action] = reward + self.params.gamma * max(Q_next_target)   
         error = sum(pow(Q_model - old_Q, 2))/len(Q_model) 
 
@@ -122,13 +122,13 @@ class DQN_Agent(Agent):
     def fit(self):
 
         # Wait for warmup
-        if len(self.memory) < self.batch_size:
+        if len(self.memory) < self.params.batch_size:
             return
 
         # Sample experiences + train model
-        mini_batch, idx_memory = self.memory.sample(self.batch_size)
+        mini_batch, idx_memory = self.memory.sample(self.params.batch_size)
         states, Q_model, errors =self.update_model(mini_batch)
-        self.model.fit(states, Q_model, batch_size=self.batch_size, epochs=1, verbose=0)
+        self.model.fit(states, Q_model, batch_size=self.params.batch_size, epochs=1, verbose=0)
 
         # Update Memory based on training
         data_update = DataMemoryUpdate(idx_memory, errors)
@@ -138,12 +138,12 @@ class DQN_Agent(Agent):
         self.update_target()
 
         # Update Exploration epsilon number
-        self.epsilon = max(self.epsilon*self.epsilon_decay, self.epsilon_min) 
+        self.epsilon = max(self.epsilon*self.params.epsilon_decay, self.params.epsilon_min) 
     
 
     def DQN_update(self, mini_batch: List[Experience]):
         states = np.array([experience.state for experience in mini_batch])
-        action = np.array([experience.action for experience in mini_batch])
+        action = np.array([np.nonzero(experience.action) for experience in mini_batch])
         reward = np.array([experience.reward for experience in mini_batch])
         next_states = np.array([experience.next_state for experience in mini_batch])
         done = np.array([experience.done for experience in mini_batch])
@@ -157,15 +157,15 @@ class DQN_Agent(Agent):
         old_Q = np.copy(Q_model)
 
         #DEBUG
-        if np.any(Q_model > 1/(1-self.gamma)):
+        if np.any(Q_model > 1/(1-self.params.gamma)):
             print('DEBUG: Q value is diverging')
 
         ### Adapt Q_model depending of reward of next state
-        for i in range(self.batch_size):
+        for i in range(self.params.batch_size):
             if done[i]:
                 Q_model[i][action[i]] = reward[i]
             else:
-                Q_model[i][action[i]] = reward[i] + self.gamma * max(Q_next_target[i])
+                Q_model[i][action[i]] = reward[i] + self.params.gamma * max(Q_next_target[i])
             
             # Error is MSE error (but only change on 1 with DQN)
             errors[i] = sum(pow(Q_model[i] - old_Q[i], 2))/len(Q_model[i])
@@ -174,7 +174,7 @@ class DQN_Agent(Agent):
     
     def Double_DQN_update(self, mini_batch):
         states = np.array([experience.state for experience in mini_batch])
-        action = np.array([experience.action for experience in mini_batch])
+        action = np.array([np.nonzero(experience.action) for experience in mini_batch])
         reward = np.array([experience.reward for experience in mini_batch])
         next_states = np.array([experience.next_state for experience in mini_batch])
         done = np.array([experience.done for experience in mini_batch])
@@ -185,19 +185,19 @@ class DQN_Agent(Agent):
 
         Q_model = self.model.predict(states)
         #DEBUG
-        if np.any(Q_model > 1/(1-self.gamma)):
+        if np.any(Q_model > 1/(1-self.params.gamma)):
             print('DEBUG: Q value is diverging')
 
         Q_next_model = self.model.predict(next_states) #DQN
         Q_next_target = self.target_model.predict(next_states) #Target model
         old_Q = np.copy(Q_model)
         ### Adapt Q_model depending of reward of next state
-        for i in range(self.batch_size):
+        for i in range(self.params.batch_size):
             if done[i]:
                 Q_model[i][action[i]] = reward[i]
             else:
                 a = np.argmax(Q_next_model[i])
-                Q_model[i][action[i]] = reward[i] + self.gamma * (Q_next_target[i][a])
+                Q_model[i][action[i]] = reward[i] + self.params.gamma * (Q_next_target[i][a])
 
             # Error is MSE error (but only change on 1 with DQN)
             errors[i] = sum(pow(Q_model[i] - old_Q[i], 2))/len(Q_model[i])
@@ -212,7 +212,7 @@ class DQN_Agent(Agent):
     def soft_update_target(self):
         for t, m in zip(self.target_model.trainable_variables, 
                         self.model.trainable_variables):
-                        t.assign(t * (1 - self.tau) + m * self.tau)
+                        t.assign(t * (1 - self.params.tau) + m * self.params.tau)
             
 
     # Queries main network for Q values given current observation space (environment state)
@@ -221,7 +221,10 @@ class DQN_Agent(Agent):
 
     def get_action(self, state):
         # Get best action from Q depending on model
-        return np.argmax(self.get_qs(state))
+        idx_action = np.argmax(self.get_qs(state))
+        action = np.zeros(self.action_shape)
+        action[idx_action] = 1
+        return action
 
     def get_action_training(self, state):
         # Exploration during training
@@ -230,7 +233,10 @@ class DQN_Agent(Agent):
         else:
             # Get random action
             # ONLY FOR discrete events (as DQN)
-            return random.choice(list(range(self.action_shape)))
+            idx_action = random.choice(list(range(int(self.action_shape))))
+            action = np.zeros(self.action_shape)
+            action[idx_action] = 1
+            return action 
 
 
 if __name__ == '__main__':

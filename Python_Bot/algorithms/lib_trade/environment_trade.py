@@ -29,7 +29,7 @@ class Environment_Compare_Trading(Environment):
     def __init__(self, size_historic: int, prc_taxes: float, is_order_random: bool=True):
         '''Environment dependant of the size of historic for prediction'''
         super().__init__()
-        self.state_shape = np.array(2*size_historic+1)  # Historic of 2 trades + Taxes
+        self.state_shape = np.array([2*size_historic+1])  # Historic of 2 trades + Taxes
         self.action_shape = np.array((2,))              # Choose 1rst or 2nd trade
         self.prc_taxes=prc_taxes
         self.is_order_random = is_order_random
@@ -102,9 +102,11 @@ class Environment_Compare_Trading(Environment):
         done = (self.ctr_comparison>=self.nb_trade-1)
         
         # Generate next state 
-        next_state=None
-        if not done:
+        if done:
+            next_state = np.zeros(self.state_shape)
+        else:
             next_state = self._generate_state()
+            
 
         # Other informations used by the manager (or parent classes)
         # Important informations after each choice of trades are:

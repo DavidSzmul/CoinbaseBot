@@ -1,8 +1,9 @@
-import config
 import os
 import json
 import pandas as pd
 from enum import Enum
+
+import config
 
 CRYPTO_STUDY_FILE = os.path.join(config.DATA_DIR, 'dtb/CRYPTO_STUDIED.json')
 STORE = os.path.join(config.DATA_DIR, 'dtb/store.h5')

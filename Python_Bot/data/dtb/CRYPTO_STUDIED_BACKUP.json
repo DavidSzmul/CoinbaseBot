@@ -2,13 +2,5 @@
   { "name":"USD Coin", "coinbase_name": "USDC-USD"},
   { "name":"Bitcoin", "coinbase_name": "BTC-USD"},
   { "name":"Eutherium", "coinbase_name": "ETH-EUR"},
-  { "name":"Eutherium Classic", "coinbase_name": "ETC-USD"},
-  { "name":"Litecoin", "coinbase_name": "LTC-USD"},
-  { "name":"Cartesi", "coinbase_name": "CTSI-USD"},
-  { "name":"Forth", "coinbase_name": "FORTH-USD"},
-  { "name":"Amp", "coinbase_name": "AMP-USD"},
-  { "name":"Internet Computer", "coinbase_name": "ICP-USD"},
-  { "name":"EOS", "coinbase_name": "EOS-USD"},
-  { "name":"Polygon", "coinbase_name": "MATIC-USD"},
-  { "name":"Gitcoin", "coinbase_name": "GTC-USD"}
+  { "name":"DOGE", "coinbase_name": "DOGE-USD"}
 ]

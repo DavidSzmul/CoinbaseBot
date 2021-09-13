@@ -1,11 +1,20 @@
 ### Contains Environment, Data
+from dataclasses import dataclass
 import numpy as np
+import pandas as pd
 import random
 from typing import List, Tuple
 from rl_lib.environment.environment import Environment
 from algorithms.lib_trade.processing_trade import Experience_Trade
 
 STD_TAXE: np.float64=1e-2 # Standard deviation of taxes (constant)
+
+@dataclass
+class Info_Trading:
+    flag_change_trade: bool
+    from_: str
+    to_: str
+    last_values: pd.DataFrame
 
 class Environment_Compare_Trading(Environment):
     '''Environment used for Reinforcement Learning to determine the best suited trade between 2
@@ -19,6 +28,9 @@ class Environment_Compare_Trading(Environment):
 
     # Variables
     idx_current_trade: int=0
+    current_trade: str=''
+    previous_trade: str=''
+    
     state_shape: np.ndarray
     action_shape: np.ndarray
     order_comparison: List[int]
@@ -71,9 +83,15 @@ class Environment_Compare_Trading(Environment):
     def get_current_trade(self):
         return self.idx_current_trade
 
-    def set_new_episode(self, exp: Experience_Trade, idx_current_trade: int=None):
-        if idx_current_trade is not None:
-            self.idx_current_trade = idx_current_trade # Otherwise, keep last kept trade
+    def set_new_data(self, exp: Experience_Trade, current_trade: str=''):
+
+        if current_trade != '':
+            self.current_trade = current_trade
+            self.previous_trade = current_trade
+        
+        if exp.current_trades is not None: # Trades are not defined so only the index is important
+            self.idx_current_trade = exp.current_trades.columns.get_loc(self.current_trade) # Otherwise, keep last kept trade
+        
         self.current_exp = exp
         self.nb_trade = exp.state.shape[1]
 
@@ -113,7 +131,15 @@ class Environment_Compare_Trading(Environment):
         # - The current value of trades
         info = None
         if done:
-            info = {
-                    'idx_chosen_trade': self.idx_current_trade,
-                }
+
+            if self.current_exp.current_trades is not None:
+                self.current_trade = self.current_exp.current_trades.columns[self.idx_current_trade]
+                
+                flag_change_trade = (self.current_trade != self.previous_trade)
+                from_ = self.previous_trade if flag_change_trade else None
+                to_ = self.current_trade if flag_change_trade else None
+
+                info = Info_Trading(flag_change_trade, from_, to_, self.current_exp.current_trades)
+                self.previous_trade = self.current_trade
+            
         return next_state, reward, done, info

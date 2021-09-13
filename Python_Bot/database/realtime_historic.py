@@ -61,4 +61,6 @@ class Scrapping_Coinbase(object):
 if __name__=='__main__':
     scrap = Scrapping_Coinbase()
     ### Directly inside class
-    scrap.refresh_task_every()
+    # scrap.refresh_task_every()
+    scrap.refresh_crypto_value()
+    print('hello')

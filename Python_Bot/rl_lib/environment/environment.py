@@ -19,6 +19,10 @@ class Environment(ABC):
     def reset(self) -> np.ndarray:
         '''Reset environment'''
 
+    @abstractmethod
+    def set_new_data(self, *args, **kargs):
+        '''Data to be send to redefine environment'''
+
     def verify_action_shape(self, action: np.ndarray):
         if np.shape(action) != self.action_shape:
             raise ValueError("Size of action is not corrsponding with environment")

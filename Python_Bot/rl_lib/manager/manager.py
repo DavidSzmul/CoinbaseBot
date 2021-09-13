@@ -38,6 +38,7 @@ class RL_Train_Perfs_Historic:
         return (self.nb_window is not None)
 
     def reset(self):
+
         self.t = deque(maxlen=self.max_deque)
         self.total_rewards = deque(maxlen=self.max_deque)
         self.total_losses = deque(maxlen=self.max_deque)

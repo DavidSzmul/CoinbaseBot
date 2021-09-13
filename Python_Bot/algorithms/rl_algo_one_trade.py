@@ -1,15 +1,20 @@
 ### Algorithm of choice of crypto using DQN Reinforcement Learning Algo
 ### Model can be continuously improved by generating augmented database
+from algorithms.ihm_trade.displayer_perfs_trade import Displayer_Perfs_Trade
+from threading import current_thread
 import time
-from typing import Any, List
+from typing import Callable, List
 
 from rl_lib.agent.dqn import DQN_Agent, DQN_parameters
-from rl_lib.manager.manager import Agent_Environment_Manager
+from rl_lib.manager.manager import Agent_Environment_Manager, RL_Train_Perfs
 
-from algorithms.lib_trade.processing_trade import Scaler_Trade, Generator_Trade, Mode_Algo, Evolution_Trade_Median
-from algorithms.lib_trade.environment_trade import Environment_Compare_Trading
+from algorithms.lib_trade.processing_trade import Scaler_Trade, Generator_Trade, Mode_Algo
+from algorithms.lib_trade.environment_trade import Environment_Compare_Trading, Info_Trading
 from algorithms.lib_trade.portfolio import Portfolio
 from algorithms.ihm_trade.ihm_trade import Abstract_RL_App
+from algorithms.evolution.evolution_trade import Evolution_Trade_Median
+
+
 
 from database import Historic_coinbase_dtb
 from database.historic_generator import Historic_Coinbase_Generator
@@ -24,13 +29,23 @@ class RL_Bot_App(Abstract_RL_App):
     path_save_model: str
     scaler: Scaler_Trade
     generator: Generator_Trade
-    displayer_train: Displayer_RL_Train = None
+
+    ### CALLBACKS
+    callback_train: Callable[[RL_Train_Perfs], None]=None
+    callback_test: Callable[[Portfolio], None]=None
+    callback_test_end: Callable[[], None]=None
+
     def __init__(self):
         ### Params changable by the user (to create new model)
         self.LAYERS_MODEL = [128,64]
 
-    def set_displayer_train(self, displayer_train: Displayer_RL_Train):
-        self.displayer_train = displayer_train
+    def set_train_callback(self, callback_loop: Callable[[RL_Train_Perfs], None]):
+        self.callback_train = callback_loop
+
+    def set_test_callback(self, callback_loop: Callable[[Portfolio], None], callback_end: Callable[[], None]):
+        self.callback_test = callback_loop
+        self.callback_test_end = callback_end
+        
         
     def define_params(self, min_historic: List[int],nb_cycle_historic: List[int], path_agent:str):
         '''Definition of all objects required for bot'''
@@ -55,27 +70,35 @@ class RL_Bot_App(Abstract_RL_App):
         self.manager_RL = Agent_Environment_Manager(agent, env, flag_return_train_perfs=True)
         print('Agent+Environment Built')
 
-        # Need to refresh the database with new values
-        self.update_train_test_dtb()
+        # Setup Generator
+        self.reset_generator()
+        # self.update_train_test_dtb()
 
-    
-    def update_train_test_dtb(self):
-        # PARAMETERS
-        MAX_SIZE_DTB = 1e5
-        EVOLUTION_METHOD = Evolution_Trade_Median(start_check_future=60, end_check_future=120)
+    def reset_generator(self):
+        # Evolution method 
+        EVOLUTION_METHOD = Evolution_Trade_Median(start_check_future=-15, end_check_future=1040)
         RATIO_UNSYNCHRONOUS = 0.66
         RATIO_TRAIN_TEST = 0.8
+
+        # Get data
+        fresh_data = Historic_coinbase_dtb.load()
+        self.scaler.fit(fresh_data)
+        # Preprocess
+        self.generator.generate_train_test_database(fresh_data,EVOLUTION_METHOD,
+                    ratio_unsynchrnous_time=RATIO_UNSYNCHRONOUS,
+                    ratio_train_test=RATIO_TRAIN_TEST)
+    
+
+    def update_train_test_dtb(self):
+        # PARAMETERS
+        MAX_SIZE_DTB = 1e5  
 
         # Generate more fresh values
         hist_gen = Historic_Coinbase_Generator()
         hist_gen.update_dtb(maxSizeDtb=MAX_SIZE_DTB, verbose=True)
-        fresh_data = Historic_coinbase_dtb.load()
 
-        # Setup Preprocessing + Generator
-        self.scaler.fit(fresh_data)
-        self.generator.generate_train_test_database(fresh_data,EVOLUTION_METHOD,
-                    ratio_unsynchrnous_time=RATIO_UNSYNCHRONOUS,
-                    ratio_train_test=RATIO_TRAIN_TEST)
+        # Setup Generator
+        self.reset_generator()
         print('Ready to use BOT')
 
     
@@ -83,36 +106,62 @@ class RL_Bot_App(Abstract_RL_App):
     def train(self):
         # Set generator to correct mode
         self.generator.set_mode(Mode_Algo.train)
-
-        # Initialize displayer
-        if self.displayer_train:
-            self.displayer_train.setup_new_window('Train', 'Training in execution')
-
-        # Loop
         self.manager_RL.env.idx_current_trade = 0
+        
+        # Loop
         while (self.is_running):
-            if self.generator.is_generator_finished():
-                self.is_running=False
-                return
-
+            
             #Generate new experience on environment
-            self.manager_RL.env.set_new_episode(self.generator.get_new_experience()) 
+            self.manager_RL.env.set_new_data(self.generator.get_new_experience()) 
             # Start new experience/episode
             _, perfs = self.manager_RL.loop_episode_train()
 
-            # Display performances if enabled
-            if self.displayer_train:
-                self.displayer_train.update(perfs)
+            # Callback if enabled
+            if self.callback_train:
+                self.callback_train(perfs)
             # Print advancement
             self.generator.print_advancement()
 
+            # End Loop
+            if self.generator.is_generator_finished():
+                self.is_running=False
+                break
+
     @Abstract_RL_App._thread_run
     def test(self):
-        ctr=0
-        while self.is_running:
-            ctr+=1
-            print('Test:', ctr)
-            time.sleep(0.5)
+        # Set generator to correct mode
+        self.generator.set_mode(Mode_Algo.test)
+        portfolio = Portfolio()
+        portfolio.add_money('USDC-USD', 1000) # Add 1000$ to account
+        self.manager_RL.env.current_trade = 'USDC-USD'
+        
+        # Loop
+        while (self.is_running):
+            
+            #Generate new experience on environment
+            self.manager_RL.env.set_new_data(self.generator.get_new_experience()) 
+            # Start new experience/episode
+            info: Info_Trading = self.manager_RL.loop_episode()
+
+            # Update portfolio based on Bot decision
+            portfolio.update(info.last_values)
+            if info.flag_change_trade:
+                portfolio.convert_money(info.from_, info.to_, -1, prc_taxes=self.PRC_TAXES)
+
+            # Callback if enabled
+            if self.callback_test:
+                self.callback_test(portfolio)
+
+            # Print advancement
+            # self.generator.print_advancement()
+
+            # End Loop
+            if self.generator.is_generator_finished():
+                self.is_running=False
+                break
+        # End while
+        if self.callback_test_end: # Usually used to display results
+            self.callback_test_end()
 
     @Abstract_RL_App._thread_run
     def real_time(self):
@@ -169,6 +218,11 @@ if __name__ == '__main__':
 
     # create the MVC & start the application
     list_Historic_Environement = [
+         {'name': 'TMP: step x5 every 50 cycles on 1 days', # To enable quick tests
+        'subfolder': 'x5_50cycles_1d',
+        'min_historic': [1, 5, 25],
+        'nb_cycle_historic': [50, 50, 50],
+        },
         {'name': 'step x5 every 50 cycles on 5 days',
         'subfolder': 'x5_50cycles_5d',
         'min_historic': [1, 5, 25, 125],
@@ -188,8 +242,12 @@ if __name__ == '__main__':
     c.setup()
 
     # Setup Displayer Train
-    disp = Displayer_RL_Train(view.get_root(), nb_cycle_update=1)
-    model.set_displayer_train(disp)
+    disp_train = Displayer_RL_Train(view.get_root(), nb_cycle_update=1, title='Training...')
+    model.set_train_callback(disp_train.update)
+
+    # Setup Displayer Test
+    disp_test = Displayer_Perfs_Trade(view.get_root(), title='Test Results')
+    model.set_test_callback(disp_test.update, disp_test.display)
 
     # Start App
     c.start()

@@ -35,11 +35,14 @@ class MatplotlibPlot:
 
 class Matplotlib_Displayer(Displayer):
 
-        def __init__(self, fig, ax, master: tk.Tk, nb_cycle_update: int=1):
+        new_window: Any=None
+
+        def __init__(self, fig, ax, master: tk.Tk, nb_cycle_update: int=1, title: str=None):
             Displayer.__init__(self, nb_cycle_update=nb_cycle_update)
             self.fig = fig
             self.ax = ax
             self.master = master
+            self.title = title
             self.canvas = None
             self.reinit_fig() 
 
@@ -48,16 +51,20 @@ class Matplotlib_Displayer(Displayer):
             for a in self.ax:
                 a.clear()
 
-        def setup_new_window(self, title: str='test', text: str='hello'):
+        def exist_window(self):
+            if self.new_window is None:
+                return False
+            return (self.new_window.winfo_exists() == 1)
 
+        def setup_new_window(self):
             self.new_window = tk.Toplevel(self.master)
-            self.new_window.title(title)
+            if self.title:
+                self.new_window.title(self.title)
             self.new_window.geometry("400x400")
         
-            # A Label widget to show in toplevel
-            tk.Label(self.new_window,
-                text=text).pack()
-
+            # # A Label widget to show in toplevel
+            # tk.Label(self.new_window,
+            #     text=text).pack()
             self.canvas = backend_tkagg.FigureCanvasTkAgg(self.fig, self.new_window)
             self.canvas.get_tk_widget().pack(side=tk.BOTTOM, expand=True) #, fill=tk.BOTH
             self.canvas._tkcanvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
@@ -68,6 +75,10 @@ class Matplotlib_Displayer(Displayer):
             # Verification that data is coherent
             if len(data) != len(self.ax):
                 raise ValueError('data should has the same size as the number of axes')
+
+            # Verify if window exists
+            if not self.exist_window():
+                self.setup_new_window()
             # Check confirmation of update
             self.ctr_cycle_update=(self.ctr_cycle_update+1)%self.nb_cycle_update
             if self.ctr_cycle_update!=0:

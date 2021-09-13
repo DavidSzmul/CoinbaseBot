@@ -5,6 +5,7 @@ import random
 from typing import List
 from dataclasses import dataclass
 from enum import Enum
+from copy import copy
 
 from algorithms.evolution.evolution_trade import Evolution_Trade
     
@@ -159,9 +160,11 @@ class Generator_Trade:
             experience = None
             self.end_of_mode = False
 
+        # Create a copy to realize modif
+        experience_modified = copy(experience)
         # Normalize state
-        experience.state, _ = self.scaler.transform(experience.state)
-        return experience
+        experience_modified.state, _ = self.scaler.transform(experience_modified.state)
+        return experience_modified
 
     def is_generator_finished(self):
         return self.end_of_mode

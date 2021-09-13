@@ -1,5 +1,5 @@
-from typing import Callable, Dict, List, Tuple
-from dataclasses import dataclass
+from typing import Dict, List
+import numpy as np
 
 from algorithms.lib_trade.transactioner import Transactioner
 
@@ -96,8 +96,13 @@ class Portfolio(Dict[str, Account]):
         if to_ not in self:
             raise ValueError(to_+' is not included in portfolio')
 
+        # CLAMP Value
+        if value<0: # Need to convert all money on account
+            value = self[from_].value
+        value = min(value, self[from_].value)
+
         # SELL/BUY Ammounts
-        value_sell = min(value, self[from_].value)
+        value_sell = value
         amount_sell = value_sell/self[from_].last_price
         amount_buy = value_sell*(1-prc_taxes)/self[to_].last_price
 
@@ -115,6 +120,11 @@ class Portfolio(Dict[str, Account]):
 
     def get_total_value(self):
         return self.__total_value
+
+    def get_highest_account(self):
+        values = [v.value for v in self.values()]
+        idx = np.argmax(values)[0]
+        return self.keys()[idx]
 
     
 class Portfolio_with_Transactioner(Portfolio):

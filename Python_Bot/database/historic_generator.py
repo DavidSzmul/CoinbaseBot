@@ -286,8 +286,7 @@ if __name__ =="__main__":
 
     resolution = Historic_coinbase_dtb.Resolution_Historic.min
     Dtb = Historic_Coinbase_Generator()
-
-    Dtb.update_dtb(maxSizeDtb=1e5, resolution=resolution, verbose=True)
+    Dtb.update_dtb(maxSizeDtb=1e4, resolution=resolution, verbose=True)
     # print('Done updating data')
 
     # Dtb.verify_all_crypto_valid()

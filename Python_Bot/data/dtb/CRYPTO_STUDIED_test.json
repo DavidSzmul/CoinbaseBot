@@ -1,0 +1,6 @@
+[
+  { "name":"USD Coin", "coinbase_name": "USDC-USD"},
+  { "name":"Bitcoin", "coinbase_name": "BTC-USD"},
+  { "name":"Eutherium", "coinbase_name": "ETH-EUR"},
+  { "name":"DOGE", "coinbase_name": "DOGE-USD"}
+]

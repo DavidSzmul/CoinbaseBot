@@ -33,7 +33,7 @@ class Historic_Coinbase_Generator(Historic_Generator):
     nb_update_display: int
     nb_request: int
 
-    def reset_display_requests(self, nb_nan_to_complete: int, nb_update_display: int=10):
+    def reset_display_requests(self, nb_nan_to_complete: int, nb_update_display: int=1):
         self.ctr_request=0
         self.ctr_update_display=0
         self.nb_update_display = nb_update_display
@@ -116,7 +116,7 @@ class Historic_Coinbase_Generator(Historic_Generator):
         df= df.fillna(method='bfill')
         return df
 
-    def _call_Coinbase_api(self, crypto: str, t_start: int, t_end: int, t_step: int) -> Tuple[Dict, bool]:
+    def _call_Coinbase_api(self, crypto: str, t_start: int, t_end: int, t_step: int, verbose: bool=False) -> Tuple[Dict, bool]:
         
         # Constants
         STABLECOIN_NAME = 'USDC-USD'
@@ -148,6 +148,8 @@ class Historic_Coinbase_Generator(Historic_Generator):
         for d in data:
             data_serie[(d[0], crypto)] = {'open':d[3], 'volume':d[-1]}
         
+        # Display
+        if verbose: self.update_display_requests()
         return data_serie, flag_success
 
 
@@ -174,13 +176,14 @@ class Historic_Coinbase_Generator(Historic_Generator):
         missing_cryptos = df.columns[np.nonzero(df.isna().sum(axis=0).to_numpy() == len(df.index))[0]]
         if start_new_time != df.index[0] and len(missing_cryptos)>0:
             
+            if verbose: print('Adding new cryptos...')
             t_sart_old_time = df.index[0]
             t_end_old_time = start_new_time
 
             data_serie = {}
             for t_cycle in np.arange(t_sart_old_time, t_end_old_time+dt_s, dt_s):
                 for crypto in missing_cryptos:
-                    data_buffer, success = self._call_Coinbase_api(crypto, t_cycle, min(t_cycle+dt_s, t_end_old_time-step), step)
+                    data_buffer, success = self._call_Coinbase_api(crypto, t_cycle, min(t_cycle+dt_s, t_end_old_time-step), step, verbose)
                     if not success:
                         break
                     data_serie = {**data_serie, **data_buffer}
@@ -189,11 +192,10 @@ class Historic_Coinbase_Generator(Historic_Generator):
                 # Completion
                 for k,v in data_serie.items():
                     df.at[k[0], k[1]] = v['open']
-                # Display
-                if verbose: self.update_display_requests()
 
 
         # 2nd part: Complete new timings (all cryptos are nan)
+        if verbose: print('Adding new timing...')
         date_start = start_new_time
         while date_start <= end_new_time:
             # Part Time Range
@@ -202,7 +204,7 @@ class Historic_Coinbase_Generator(Historic_Generator):
             # Call of API to get values
             data_serie = {}
             for crypto in list_crypto:
-                data_buffer, success = self._call_Coinbase_api(crypto, date_start, date_max, step)
+                data_buffer, success = self._call_Coinbase_api(crypto, date_start, date_max, step, verbose)
                 if not success:
                     break
                 data_serie = {**data_serie, **data_buffer}
@@ -228,7 +230,7 @@ class Historic_Coinbase_Generator(Historic_Generator):
 
     def update_dtb(self, maxSizeDtb: int=1e5, 
                     resolution:Historic_coinbase_dtb.Resolution_Historic = Historic_coinbase_dtb.Resolution_Historic.min, 
-                    path: str=None, verbose = False):
+                    path: str=None, verbose: bool=False):
         '''Complete Database based on current time'''
         
         # Define Timings
@@ -285,8 +287,8 @@ if __name__ =="__main__":
     resolution = Historic_coinbase_dtb.Resolution_Historic.min
     Dtb = Historic_Coinbase_Generator()
 
-    # Dtb.update_dtb(maxSizeDtb=1e3, resolution=resolution, verbose=True)
+    Dtb.update_dtb(maxSizeDtb=1e5, resolution=resolution, verbose=True)
     # print('Done updating data')
 
-    Dtb.verify_all_crypto_valid()
+    # Dtb.verify_all_crypto_valid()
     

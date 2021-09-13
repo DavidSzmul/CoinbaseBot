@@ -1,15 +1,18 @@
 ### Algorithm of choice of crypto using DQN Reinforcement Learning Algo
 ### Model can be continuously improved by generating augmented database
 import time
-from typing import Any, List
+from typing import List
 
 from rl_lib.agent.dqn import DQN_Agent, DQN_parameters
 from rl_lib.manager.manager import Agent_Environment_Manager
 
-from algorithms.lib_trade.processing_trade import Scaler_Trade, Generator_Trade, Mode_Algo, Evolution_Trade_Median
+from algorithms.lib_trade.processing_trade import Scaler_Trade, Generator_Trade, Mode_Algo
 from algorithms.lib_trade.environment_trade import Environment_Compare_Trading
 from algorithms.lib_trade.portfolio import Portfolio
 from algorithms.ihm_trade.ihm_trade import Abstract_RL_App
+from algorithms.evolution.evolution_trade import Evolution_Trade_Median
+
+
 
 from database import Historic_coinbase_dtb
 from database.historic_generator import Historic_Coinbase_Generator
@@ -55,27 +58,35 @@ class RL_Bot_App(Abstract_RL_App):
         self.manager_RL = Agent_Environment_Manager(agent, env, flag_return_train_perfs=True)
         print('Agent+Environment Built')
 
-        # Need to refresh the database with new values
-        self.update_train_test_dtb()
+        # Setup Generator
+        self.reset_generator()
+        # self.update_train_test_dtb()
 
-    
-    def update_train_test_dtb(self):
-        # PARAMETERS
-        MAX_SIZE_DTB = 1e5
-        EVOLUTION_METHOD = Evolution_Trade_Median(start_check_future=60, end_check_future=120)
+    def reset_generator(self):
+        # Evolution method 
+        EVOLUTION_METHOD = Evolution_Trade_Median(start_check_future=-15, end_check_future=1040)
         RATIO_UNSYNCHRONOUS = 0.66
         RATIO_TRAIN_TEST = 0.8
+
+        # Get data
+        fresh_data = Historic_coinbase_dtb.load()
+        self.scaler.fit(fresh_data)
+        # Preprocess
+        self.generator.generate_train_test_database(fresh_data,EVOLUTION_METHOD,
+                    ratio_unsynchrnous_time=RATIO_UNSYNCHRONOUS,
+                    ratio_train_test=RATIO_TRAIN_TEST)
+    
+
+    def update_train_test_dtb(self):
+        # PARAMETERS
+        MAX_SIZE_DTB = 1e5  
 
         # Generate more fresh values
         hist_gen = Historic_Coinbase_Generator()
         hist_gen.update_dtb(maxSizeDtb=MAX_SIZE_DTB, verbose=True)
-        fresh_data = Historic_coinbase_dtb.load()
 
-        # Setup Preprocessing + Generator
-        self.scaler.fit(fresh_data)
-        self.generator.generate_train_test_database(fresh_data,EVOLUTION_METHOD,
-                    ratio_unsynchrnous_time=RATIO_UNSYNCHRONOUS,
-                    ratio_train_test=RATIO_TRAIN_TEST)
+        # Setup Generator
+        self.reset_generator()
         print('Ready to use BOT')
 
     
@@ -96,7 +107,7 @@ class RL_Bot_App(Abstract_RL_App):
                 return
 
             #Generate new experience on environment
-            self.manager_RL.env.set_new_episode(self.generator.get_new_experience()) 
+            self.manager_RL.env.set_new_data(self.generator.get_new_experience()) 
             # Start new experience/episode
             _, perfs = self.manager_RL.loop_episode_train()
 

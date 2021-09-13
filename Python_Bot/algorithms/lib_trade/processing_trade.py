@@ -4,8 +4,9 @@ import pandas as pd
 import random
 from typing import List
 from dataclasses import dataclass
-from abc import ABC, abstractmethod
 from enum import Enum
+
+from algorithms.evolution.evolution_trade import Evolution_Trade
     
 class Scaler_Trade:
 
@@ -84,45 +85,6 @@ class Scaler_Trade:
         prc_change = self.get_pct_change(state)
         normalized_prc = self.transform_prc_change(prc_change)
         return normalized_prc, prc_change
-
-class Evolution_Trade(ABC):
-    @abstractmethod
-    def get_evolution(self, historic: pd.DataFrame):
-        '''Method to get evolution of trade, used to estimate reward for Reinforcement Learning'''
-
-    @abstractmethod
-    def get_time_anticipation(self) ->int:
-        '''Method to get the maximum time needed to calculate evolution'''
-
-class Evolution_Trade_Median(Evolution_Trade):
-    '''Class estimating evolution of trades based on median'''
-
-    _start_check_future: int # Start of anticipation
-    _end_check_future: int   # End   of anticipation
-    def __init__(self, start_check_future, end_check_future):
-        if not start_check_future or not end_check_future:
-            raise ValueError('Parameters shall not be None')
-        if start_check_future>end_check_future:
-            raise ValueError('Start has to be inferior compared to end')
-        if start_check_future<=0:
-            raise ValueError('Start has to be strictly superior to zero')
-        
-        self._start_check_future = start_check_future
-        self._end_check_future = end_check_future
-
-    def get_evolution(self, historic: np.ndarray) -> np.ndarray:
-        '''Evolution based on median'''
-        evolution = np.zeros(historic.shape)
-
-        for i in range(historic.shape[0] - self._end_check_future +1):
-            array_window = historic[i + np.arange(self._start_check_future, self._end_check_future), :]
-            evolution[i,:] = np.median(array_window, axis=0)/historic[i,:] - 1
-        return evolution
-    
-    def get_time_anticipation(self) ->int:
-        '''Max timing to get anticipation'''
-        return self._end_check_future
-
     
             
 @dataclass

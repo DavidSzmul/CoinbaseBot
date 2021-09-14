@@ -2,6 +2,7 @@ import unittest
 import pandas as pd
 import numpy as np
 from algorithms.lib_trade.processing_trade import *
+from algorithms.evolution.evolution_trade import *
 
 class TestScalerTrade(unittest.TestCase):
     
@@ -135,7 +136,7 @@ class TestEvolutionTradeMedian(unittest.TestCase):
         self.assertRaises(ValueError, Evolution_Trade_Median, None, None)
         self.assertRaises(ValueError, Evolution_Trade_Median, 1, None)
         self.assertRaises(ValueError, Evolution_Trade_Median, None, 2)
-        self.assertRaises(ValueError, Evolution_Trade_Median, 0, 2)
+        self.assertRaises(ValueError, Evolution_Trade_Median, -1, -2)
         self.assertRaises(ValueError, Evolution_Trade_Median, 3, 2)
 
         obj = Evolution_Trade_Median(2,10)

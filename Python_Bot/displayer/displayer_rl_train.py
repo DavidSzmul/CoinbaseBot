@@ -7,13 +7,13 @@ from displayer.displayer import Matplotlib_Displayer, MatplotlibPlot
 class Displayer_RL_Train(Matplotlib_Displayer):
     '''Dipslayer specific to RL training'''
     
-    def __init__(self, master: tk.Tk, nb_cycle_update: int=1, nb_window: int=10, title: str=None):
+    def __init__(self, master: tk.Tk, nb_cycle_update: int=1, nb_window: int=10):
         '''Initialization'''
         fig, ax = plt.subplots(3, 1, sharex=True) 
         plt.close() # This enables to close correctly mainloop when app is destroyed
 
-        Matplotlib_Displayer.__init__(self, fig, ax, master, nb_cycle_update=nb_cycle_update, title=title)
-        self.train_perfs = RL_Train_Perfs_Historic(nb_window=10)
+        Matplotlib_Displayer.__init__(self, fig, ax, master, nb_cycle_update=nb_cycle_update, title='Training...')
+        self.train_perfs = RL_Train_Perfs_Historic(nb_window=nb_window)
 
     def update(self, train_perf: RL_Train_Perfs):
         self.train_perfs.add(train_perf)

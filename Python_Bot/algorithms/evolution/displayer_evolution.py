@@ -40,7 +40,7 @@ if __name__ =="__main__":
     from algorithms.evolution.evolution_trade import Evolution_Trade_Median
 
     evolution_method = Evolution_Trade_Median(start_check_future=-15, end_check_future=1040)
-    trade_display = 'ETH-USD'
+    trade_display = 'BTC-USD'
 
     disp = Displayer_Evolution(evolution_method, trade_display)
     disp.plot()

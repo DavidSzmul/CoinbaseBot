@@ -83,17 +83,18 @@ class Environment_Compare_Trading(Environment):
     def get_current_trade(self):
         return self.idx_current_trade
 
-    def set_new_data(self, exp: Experience_Trade, current_trade: str=''):
+    def set_new_data(self, exp: Experience_Trade=None, current_trade: str=''):
 
         if current_trade != '':
             self.current_trade = current_trade
             self.previous_trade = current_trade
-        
-        if exp.current_trades is not None: # Trades are not defined so only the index is important
-            self.idx_current_trade = exp.current_trades.columns.get_loc(self.current_trade) # Otherwise, keep last kept trade
-        
-        self.current_exp = exp
-        self.nb_trade = exp.state.shape[1]
+
+        if exp:
+            self.current_exp = exp
+            self.nb_trade = exp.state.shape[1]
+            if exp.current_trades is not None:
+                self.idx_current_trade = exp.current_trades.columns.get_loc(self.current_trade) # Otherwise, keep last kept trade
+
 
     def reset(self):
         '''Reset environment -> Corresponds to a new timing to compare all trades

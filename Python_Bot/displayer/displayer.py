@@ -37,13 +37,14 @@ class Matplotlib_Displayer(Displayer):
 
         new_window: Any=None
 
-        def __init__(self, fig, ax, master: tk.Tk, nb_cycle_update: int=1, title: str=None):
+        def __init__(self, fig, ax, master: tk.Tk, use_toolbar: bool=True, nb_cycle_update: int=1, title: str=None):
             Displayer.__init__(self, nb_cycle_update=nb_cycle_update)
             self.fig = fig
             self.ax = ax
             self.master = master
             self.title = title
             self.canvas = None
+            self.use_toolbar = use_toolbar
             self.reinit_fig() 
 
         def reinit_fig(self):
@@ -67,6 +68,10 @@ class Matplotlib_Displayer(Displayer):
             #     text=text).pack()
             self.canvas = backend_tkagg.FigureCanvasTkAgg(self.fig, self.new_window)
             self.canvas.get_tk_widget().pack(side=tk.BOTTOM, expand=True) #, fill=tk.BOTH
+
+            if self.use_toolbar:
+                toolbar = backend_tkagg.NavigationToolbar2Tk(self.canvas, self.new_window)
+                toolbar.update()
             self.canvas._tkcanvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
             
 

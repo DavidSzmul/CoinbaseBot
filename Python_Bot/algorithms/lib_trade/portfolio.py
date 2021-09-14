@@ -104,6 +104,8 @@ class Portfolio(Dict[str, Account]):
         # SELL/BUY Ammounts
         value_sell = value
         amount_sell = value_sell/self[from_].last_price
+        # Clamp due to float error
+        amount_sell = min(amount_sell, self[from_].amount)
         amount_buy = value_sell*(1-prc_taxes)/self[to_].last_price
 
         # Modify into accounts
@@ -123,8 +125,8 @@ class Portfolio(Dict[str, Account]):
 
     def get_highest_account(self):
         values = [v.value for v in self.values()]
-        idx = np.argmax(values)[0]
-        return self.keys()[idx]
+        idx = np.argmax(values)
+        return list(self.keys())[idx]
 
     
 class Portfolio_with_Transactioner(Portfolio):

@@ -1,5 +1,6 @@
 
 from collections import deque
+# import numpy as np
 from algorithms.lib_trade.portfolio import Portfolio
 import matplotlib.pyplot as plt
 import tkinter as tk
@@ -30,32 +31,40 @@ class Portfolio_Perfs_Historic:
 
 
     def add(self, portfolio: Portfolio):
+        
+        previous_trade = self.chosen_trade
+        self.chosen_trade = portfolio.get_highest_account()
+
         if self.t:# If not empty
             self.t.append(self.t[-1]+1)
         else: # If empty
             self.t.append(0)
-            
-        previous_trade = self.chosen_trade
-        self.chosen_trade = portfolio.get_highest_account()
-        self.total_pfl.append(portfolio.get_total_value())
+            previous_trade = self.chosen_trade
+            self.last_value = portfolio[self.chosen_trade].value
 
-        if (previous_trade != self.chosen_trade):
+        self.anotations_trades.append(None)
+        if (previous_trade != self.chosen_trade): # If change of trade
+            self.t.append(self.t[-1])
+            self.total_pfl.append(self.total_pfl[-1])
+            self.trades_prc.append(self.trades_prc[-1])
             self.anotations_trades.append(self.chosen_trade)
             self.last_value = portfolio[self.chosen_trade].value
         
         prc = (portfolio[self.chosen_trade].value / self.last_value) - 1
         self.trades_prc.append(prc)
+        self.total_pfl.append(portfolio.get_total_value()) 
 
 
 class Displayer_Perfs_Trade(Matplotlib_Displayer):
     '''Class Displaying performances of bot (test or real time) based on Portfolio accounts'''
     
-    def __init__(self, master: tk.Tk, nb_cycle_update: int=1, title: str=None):
+    def __init__(self, master: tk.Tk, nb_cycle_update: int=1):
         '''Initialization'''
-        fig, ax = plt.subplots(3, 1, sharex=True) 
+        fig, ax = plt.subplots(2, 1, sharex=True) 
         plt.close() # This enables to close correctly mainloop when app is destroyed
 
-        Matplotlib_Displayer.__init__(self, fig, ax, master, nb_cycle_update=nb_cycle_update, title=title)
+        Matplotlib_Displayer.__init__(self, fig, ax, master, 
+                                        use_toolbar=True, nb_cycle_update=nb_cycle_update, title='Test Results')
         self.perfs = Portfolio_Perfs_Historic()
 
     def update(self, portfolio: Portfolio):
@@ -80,6 +89,8 @@ class Displayer_Perfs_Trade(Matplotlib_Displayer):
         for idx, annot in enumerate(perfs.anotations_trades):
             if annot is not None:
                 self.ax[1].annotate(annot, (perfs.t[idx], 0))
+        self.fig.canvas.draw()
+
         
     def display(self):
         data_displayer = [

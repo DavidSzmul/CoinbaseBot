@@ -10,7 +10,7 @@ from rl_lib.manager.manager import Agent_Environment_Manager, RL_Train_Perfs
 
 from algorithms.lib_trade.processing_trade import Scaler_Trade, Generator_Trade, Mode_Algo
 from algorithms.lib_trade.environment_trade import Environment_Compare_Trading, Info_Trading
-from algorithms.lib_trade.portfolio import Portfolio
+from algorithms.lib_trade.portfolio import Account, Portfolio
 from algorithms.ihm_trade.ihm_trade import Abstract_RL_App
 from algorithms.evolution.evolution_trade import Evolution_Trade_Median
 
@@ -105,9 +105,11 @@ class RL_Bot_App(Abstract_RL_App):
     @Abstract_RL_App._thread_run
     def train(self):
         # Set generator to correct mode
+        trade_name_INIT = 'USDC-USD'
         self.generator.set_mode(Mode_Algo.train)
-        self.manager_RL.env.idx_current_trade = 0
-        
+        self.manager_RL.env.set_new_data(current_trade=trade_name_INIT) 
+        self.manager_RL.env.idx_current_trade = 0 # TODO: DEBUG
+
         # Loop
         while (self.is_running):
             
@@ -130,21 +132,24 @@ class RL_Bot_App(Abstract_RL_App):
     @Abstract_RL_App._thread_run
     def test(self):
         # Set generator to correct mode
+        trade_name_INIT = 'USDC-USD'
         self.generator.set_mode(Mode_Algo.test)
         portfolio = Portfolio()
-        portfolio.add_money('USDC-USD', 1000) # Add 1000$ to account
-        self.manager_RL.env.current_trade = 'USDC-USD'
+        portfolio.set_account(Account(trade_name_INIT, 1))
+        portfolio.add_money(trade_name_INIT, 1000) # Add 1000$ to account
+        self.manager_RL.env.set_new_data(current_trade=trade_name_INIT) 
         
         # Loop
         while (self.is_running):
             
             #Generate new experience on environment
-            self.manager_RL.env.set_new_data(self.generator.get_new_experience()) 
+            self.manager_RL.env.set_new_data(exp=self.generator.get_new_experience()) 
             # Start new experience/episode
             info: Info_Trading = self.manager_RL.loop_episode()
 
             # Update portfolio based on Bot decision
-            portfolio.update(info.last_values)
+            last_prices = info.last_values.to_dict('records')[0]
+            portfolio.update(last_prices)
             if info.flag_change_trade:
                 portfolio.convert_money(info.from_, info.to_, -1, prc_taxes=self.PRC_TAXES)
 
@@ -241,12 +246,12 @@ if __name__ == '__main__':
     c = Controller_MVC_Trade(model, view, list_Historic_Environement)
     c.setup()
 
-    # Setup Displayer Train
-    disp_train = Displayer_RL_Train(view.get_root(), nb_cycle_update=1, title='Training...')
+    # Setup Displayer Train 
+    disp_train = Displayer_RL_Train(view.get_root(), nb_cycle_update=1)
     model.set_train_callback(disp_train.update)
 
     # Setup Displayer Test
-    disp_test = Displayer_Perfs_Trade(view.get_root(), title='Test Results')
+    disp_test = Displayer_Perfs_Trade(view.get_root())
     model.set_test_callback(disp_test.update, disp_test.display)
 
     # Start App

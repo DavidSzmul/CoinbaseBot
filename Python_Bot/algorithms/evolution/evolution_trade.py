@@ -32,7 +32,9 @@ class Evolution_Trade_Median(Evolution_Trade):
         evolution = np.zeros(historic.shape)
 
         for i in range(historic.shape[0] - self._end_check_future +1):
-            array_window = historic[np.max(i + np.arange(self._start_check_future, self._end_check_future), 0), :]
+            idx_window = i + np.arange(self._start_check_future, self._end_check_future)
+            idx_window = [idx for idx in idx_window if idx>=0]
+            array_window = historic[idx_window, :]
             evolution[i,:] = np.median(array_window, axis=0)/historic[i,:] - 1
         return evolution
     

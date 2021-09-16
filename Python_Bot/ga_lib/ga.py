@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Tuple
 import numpy as np
 import numpy.matlib as mb
 from dataclasses import dataclass
@@ -10,11 +10,10 @@ class GA_Params:
     range_max: np.ndarray
     nb_population: int
     nb_generation_max: int
-    mutation_factor: float
+    mutation_factor: float=0.1
+    keep_best: bool=True
     type_optim: str='min' # 'min' or 'max'
     nb_no_improve_max: int=None
-
-CrossoverFunction_Type = Callable[[np.ndarray, np.ndarray], np.ndarray]
 
 
 @dataclass    
@@ -24,23 +23,18 @@ class Population:
     cost: np.ndarray        # Result of optimization function
     p_selection: np.ndarray # Probaility of selection
     best: np.ndarray        # Chromosomes of current best    
+    probability_choose: np.ndarray  # Cumsum of proba to choose parents
 
-    def __init__(self, nb_population: int, nb_params: int, nb_no_improve: int=0):
+    def __init__(self, nb_population: int, nb_params: int, keep_best: bool=True):
         self.X = np.zeros((nb_population, nb_params))
-        self.cost = np.zeros((nb_population,))
-        self.p_selection = np.zeros((nb_population,))
-        self.best = np.zeros((nb_params,))
-        self.nb_no_improve = nb_no_improve
+        self._reinit()
+        self.keep_best = keep_best
 
     def _reinit(self):
-        nb_population = 
-        nb_params = 
+        nb_population, nb_params = self.X.shape
         self.cost = np.zeros((nb_population,))
         self.p_selection = np.zeros((nb_population,))
         self.best = np.zeros((nb_params,))
-        self.nb_no_improve = nb_no_improve
-
-
 
     def set_X(self, X: np.ndarray):
         self.X = X
@@ -64,19 +58,18 @@ class Population:
         self.X = self.X[index_sort,:];                                    
         self.cost = self.cost[index_sort];  
         self.p_selection = self.p_selection[index_sort]                    
-        self.best = self.X[1,:]; 
+        self.best = self.X[0,:]; 
 
-    def do_crossover(self, crossover_fcn: CrossoverFunction_Type):
-        # Choose 2 parents
-        probability_choose = np.cumsum(self.p_selection)
-        for idx_pop in self.X.shape[0]:
-            idx_parent_A = np.nonzero(probability_choose>=np.random.rand(1))[0]
-            idx_parent_B = np.nonzero(probability_choose>=np.random.rand(1))[0]
-            parent_A, parent_B = self.X[idx_parent_A, :], self.X[idx_parent_B, :]
+        self.probability_choose = np.cumsum(self.p_selection)
 
-            child = crossover_fcn(parent_A, parent_B)
+    def choose_2_parents(self) -> Tuple[np.nd_array, np.nd_array]:
 
+        idx_parent_A = np.nonzero(self.probability_choose>=np.random.rand(1))[0]
+        idx_parent_B = np.nonzero(self.probability_choose>=np.random.rand(1))[0]
+        return self.X[idx_parent_A, :], self.X[idx_parent_B, :]
 
+CrossoverFunction_Type = Callable[[np.ndarray, np.ndarray], np.ndarray]
+MutationFunction_Type = Callable[[np.ndarray, float], np.ndarray]
 
 class GA:
     '''Genetic algorithm class'''
@@ -105,9 +98,32 @@ class GA:
                     np.random.rand(nb_population, nb_params)*mb.repmat(self.params.range_max-self.params.range_min, nb_population, 1)
                 )   
 
+    def do_crossover(self, population: Population, crossover_fcn: CrossoverFunction_Type) -> np.ndarray:
+        '''Creation of childs based on current population'''
+        # Choose 2 parents
+        childs = population.X.copy() # Keep best on index 0
+        for idx_pop in range(self.params.keep_best*1, childs.shape[0]):
+            parent_A, parent_B = population.choose_2_parents()
+            childs[idx_pop, :] = crossover_fcn(parent_A, parent_B)
 
-    def run(self, optim_fcn: Callable[[np.ndarray],float], callback_loop: Callable=None):
+        return childs
+
+    def do_mutation(self, childs: np.ndarray, mutation_fcn: MutationFunction_Type) -> np.ndarray:
+        '''Mutation of childs'''
+        childs_mutated = childs.copy()  # Keep best on index 0
+        for idx_pop in range(self.params.keep_best*1, childs_mutated.shape[0]):
+            childs_mutated[idx_pop, :] = mutation_fcn(childs_mutated[idx_pop, :], self.params.mutation_factor)
+        return childs_mutated
+
+    def run(self,   optim_fcn: Callable[[np.ndarray],float], 
+                    crossover_fcn: CrossoverFunction_Type,
+                    mutation_fcn: MutationFunction_Type,
+                    callback_loop: Callable=None) -> np.ndarray:
         '''Execution of ga using optimization function'''
+
+        # Initialization of internal variables
+        ctr_no_improve = 0
+        best_cost = None
 
         # Initialization of population
         current_population = Population(self.params.nb_population, self.nb_params)
@@ -120,6 +136,33 @@ class GA:
             current_population.update_costs(optim_fcn, self.is_minimization)
             ### Selection
             current_population.do_selection()
+
+            
+            ### Estimation of performances
+            current_best_cost = current_population.cost[0]
+            if (current_best_cost < best_cost):
+                best_cost = current_best_cost
+                ctr_no_improve = 0
+            else:
+                ctr_no_improve += 1
+
+            if callback_loop:
+                callback_loop(current_population)
+            print(f'Generation {idx_gen} -> best: {current_best_cost} / nb_no_improve: {ctr_no_improve} / mean: {np.mean(current_population.cost)}')
+            # End loop if no improvement
+            if ctr_no_improve>=self.params.nb_no_improve_max:
+                break
+
+            # Prepare new generation
+            ### Crossover
+            childs = self.do_crossover(current_population, crossover_fcn)
+            ### Mutation
+            childs_mutated = self.do_mutation(childs, mutation_fcn)
+            current_population.set_X(childs_mutated)
+        
+        return current_population.best
+
+
 
 
             

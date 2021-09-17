@@ -2,7 +2,10 @@ from typing import Callable, Tuple
 import numpy as np
 import numpy.matlib as mb
 from dataclasses import dataclass
-    
+
+from ga_lib.crossover import CrossoverFunction_Type
+from ga_lib.mutation import MutationFunction_Type
+
 @dataclass
 class GA_Params:
     '''Datalass containing all parameters useful to Genetic Algoritm class'''
@@ -68,8 +71,6 @@ class Population:
         idx_parent_B = np.nonzero(self.probability_choose>=np.random.rand(1))[0]
         return self.X[idx_parent_A, :], self.X[idx_parent_B, :]
 
-CrossoverFunction_Type = Callable[[np.ndarray, np.ndarray], np.ndarray]
-MutationFunction_Type = Callable[[np.ndarray, float], np.ndarray]
 
 class GA:
     '''Genetic algorithm class'''
@@ -77,9 +78,11 @@ class GA:
     params:GA_Params
     is_minimization: int
     nb_params: int
+    verbose: bool
 
-    def __init__(self, params: GA_Params=GA_Params()):
+    def __init__(self, params: GA_Params=GA_Params(), verbose: bool=True):
         self.set_params(params)
+        self.verbose = verbose
 
     def set_params(self, params: GA_Params):
         if params.type_optim not in ['min','max']:

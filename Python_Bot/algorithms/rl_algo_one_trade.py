@@ -75,7 +75,7 @@ class RL_Bot_App(Abstract_RL_App):
         # self.update_train_test_dtb()
 
     def reset_generator(self):
-        # Evolution method 
+        # Evolution method: Used to define the reward of the bot
         EVOLUTION_METHOD = Evolution_Trade_Median(start_check_future=-15, end_check_future=1040)
         RATIO_UNSYNCHRONOUS = 0.66
         RATIO_TRAIN_TEST = 0.8
@@ -83,6 +83,7 @@ class RL_Bot_App(Abstract_RL_App):
         # Get data
         fresh_data = Historic_coinbase_dtb.load()
         self.scaler.fit(fresh_data)
+        
         # Preprocess
         self.generator.generate_train_test_database(fresh_data,EVOLUTION_METHOD,
                     ratio_unsynchrnous_time=RATIO_UNSYNCHRONOUS,
@@ -242,17 +243,17 @@ if __name__ == '__main__':
 
     # Setup Main IHM
     view = TkView_MVC_Trade() # WIDGETS
-    model = RL_Bot_App() # Corresponds to the application to execute
-    c = Controller_MVC_Trade(model, view, list_Historic_Environement)
+    bot = RL_Bot_App() # Corresponds to the model to execute
+    c = Controller_MVC_Trade(bot, view, list_Historic_Environement)
     c.setup()
 
     # Setup Displayer Train 
     disp_train = Displayer_RL_Train(view.get_root(), nb_cycle_update=1)
-    model.set_train_callback(disp_train.update)
+    bot.set_train_callback(disp_train.update)
 
     # Setup Displayer Test
     disp_test = Displayer_Perfs_Trade(view.get_root())
-    model.set_test_callback(disp_test.update, disp_test.display)
+    bot.set_test_callback(disp_test.update, disp_test.display)
 
     # Start App
     c.start()

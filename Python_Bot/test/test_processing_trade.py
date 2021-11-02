@@ -210,7 +210,7 @@ class TestGeneratorTrade(unittest.TestCase):
         evolution_meth = Evolution_Trade_Median(start_future, end_future)
 
         # Generate synchronous experiences
-        gen = Generator_Trade(mode=None, scaler=scaler) 
+        gen = Generator_Trade(scaler=scaler) 
         sync_exp = gen._get_synchronous_experiences(self.data, evolution_meth)
         print('Syncrhonous Generated')
 
@@ -229,7 +229,7 @@ class TestGeneratorTrade(unittest.TestCase):
 
         # Generate synchronous experiences
         nb_experiences = 10
-        gen = Generator_Trade(mode=None, scaler=scaler) 
+        gen = Generator_Trade(scaler=scaler) 
         unsync_exp = gen._get_unsynchronous_experiences(self.data, nb_experiences, evolution_meth)
         self.assertTrue(len(unsync_exp)==nb_experiences)
         print('Unsyncrhonous Generated')
@@ -247,7 +247,8 @@ class TestGeneratorTrade(unittest.TestCase):
         evolution_meth = Evolution_Trade_Median(start_future, end_future)
 
         # Generate synchronous experiences
-        gen = Generator_Trade(mode=Mode_Algo.train, scaler=scaler) 
+        gen = Generator_Trade(scaler=scaler) 
+        gen.set_mode(mode=Mode_Algo.train)
         gen.generate_train_test_database(self.data, evolution_meth)
         
         exp = gen.get_new_experience()

@@ -1,5 +1,5 @@
-from algorithms.rl_algo_one_trade import AlgoOneTrade_Manager_Factory, Displayer_RL_Train
-from algorithms.ihm_trade.ihm_trade import Model_MVC_Trade, TkView_MVC_Trade, Controller_MVC_Trade
+from algorithms.rl_algo_one_trade import RL_Bot_App
+from algorithms.ihm_trade.ihm_trade import TkView_MVC_Trade, Controller_MVC_Trade
 
 if __name__=="__main__":
     # create the MVC & start the application
@@ -16,8 +16,9 @@ if __name__=="__main__":
         }
     ]
 
-    app = AlgoOneTrade_Manager_Factory() # Corresponds to the application to execute
-    model = Model_MVC_Trade(runner) # Corresponds to the model associated to the IHM
+    app = RL_Bot_App() # Corresponds to the application to execute
+    # model = Easy_RL_App() # Corresponds to the model associated to the IHM
     view = TkView_MVC_Trade() # WIDGETS
-    c = Controller_MVC_Trade(model, view, list_Historic_Environement)
+    c = Controller_MVC_Trade(app, view, list_Historic_Environement)
+    c.setup()
     c.start()
